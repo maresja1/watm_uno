@@ -75,7 +75,7 @@ bool circuitRelay = false;
 
 void setup()
 {
-    Serial.begin(9600);
+    Serial.begin(115200);
 
     for (int i = 0; i < 10 && !Serial; ++i) {
         // wait for serial port to connect. Needed for native USB port only
@@ -142,10 +142,8 @@ void stateUpdate_readSensors_cb()
         notifyTask(&t_stateUpdate_angleAndRelay, false);
         notifyTask(&t_effect_printStatus, false);
 
-#if DEBUG_LEVEL > 1
-        DEBUG_SER_PRINT(boilerTemp);
-        DEBUG_SER_PRINT_LN(roomTemp);
-#endif
+        Serial.println("DRQ:RT:" + String(roomTemp));
+        Serial.println("DRQ:BT:" + String(boilerTemp));
     }
 }
 
@@ -191,6 +189,8 @@ void stateUpdate_angleAndRelay_cb()
     if (lastAngle != angle || lastCircuitRelay != circuitRelay) {
         notifyTask(&t_effect_refreshServoAndRelay, false);
         notifyTask(&t_effect_printStatus, true);
+        Serial.println("DRQ:O:" + String(angle));
+        Serial.println("DRQ:HN:" + String(heatNeeded));
     }
 }
 
@@ -211,6 +211,7 @@ void effect_refreshServoAndRelay_cb()
         servoSetPos(angle);
         sendCurrentStateToRelay(circuitRelayOrOverride);
     }
+    Serial.println("DRQ:R:" + String(circuitRelayOrOverride));
 }
 
 void effect_printStatus_cb()
