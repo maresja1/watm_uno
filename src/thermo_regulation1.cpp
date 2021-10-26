@@ -11,6 +11,10 @@
 #include <Servo.h>
 #include <TaskScheduler.h>
 
+#if USE_DT_ROOM_BOILER
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#endif
 
 void notifyTask(Task *task, bool immediate);
 
@@ -19,6 +23,7 @@ void effect_refreshServoAndRelay_cb();
 void effect_printStatus_cb();
 void stateUpdate_angleAndRelay_cb();
 void stateUpdate_readButtons_cb();
+void effect_processSettings_cb();
 
 Scheduler runner;
 //Tasks
@@ -27,6 +32,7 @@ Task t_stateUpdate_angleAndRelay(1000, 1, &stateUpdate_angleAndRelay_cb, &runner
 Task t_stateUpdate_readSensors(2000, -1, &stateUpdate_readSensors_cb, &runner);
 Task t_effect_refreshServoAndRelay(6000, 1, &effect_refreshServoAndRelay_cb, &runner);
 Task t_effect_printStatus(1000, 1, &effect_printStatus_cb, &runner);
+Task t_effect_processSettings(800, 1, &effect_processSettings_cb, &runner);
 
 // initialize the library with the numbers of the interface pins
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
@@ -34,6 +40,11 @@ LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 #if USE_DHT_ROOM_TEMP
 // instance of digital thermometer
 DHT_Unified digitalThermometer(DHT21_PIN, DHT21);
+#endif
+
+#if USE_DT_ROOM_BOILER
+OneWire oneWire_TempBoiler(DT_BOILER_PIN);
+DallasTemperature dtTempBoiler(&oneWire_TempBoiler);
 #endif
 
 // servo allowing air to come in the boiler
@@ -61,10 +72,11 @@ Configuration config = {
 };
 
 #define MAX_BUFFER_LEN 20
-char buffer[20];
+char buffer[MAX_BUFFER_LEN];
 
 uint8_t angle = 99;
 int16_t settingsSelected = -1;
+int16_t settingsSelectedPrint = -1;
 float boilerTemp = 0.0f;
 float roomTemp = 0.0f;
 float roomHumidity = 0.0f;
@@ -75,7 +87,7 @@ bool circuitRelay = false;
 
 void setup()
 {
-    Serial.begin(115200);
+    Serial.begin(9600);
 
     for (int i = 0; i < 10 && !Serial; ++i) {
         // wait for serial port to connect. Needed for native USB port only
@@ -85,14 +97,16 @@ void setup()
     servo.attach(SERVO_PIN);
     analogReference(EXTERNAL);
     pinMode(SERVO_PIN, OUTPUT);
+    digitalWrite(CIRCUIT_RELAY_PIN, HIGH);
     pinMode(CIRCUIT_RELAY_PIN, OUTPUT);
-    pinMode(BTN_1_PIN, INPUT);
-    pinMode(BTN_2_PIN, INPUT);
-    pinMode(BTN_3_PIN, INPUT);
-    pinMode(BTN_4_PIN, INPUT);
+    pinMode(BTN_1_PIN, INPUT_PULLUP);
+    pinMode(BTN_2_PIN, INPUT_PULLUP);
+    pinMode(BTN_3_PIN, INPUT_PULLUP);
+    pinMode(BTN_4_PIN, INPUT_PULLUP);
 
     // set up the LCD's number of columns and rows:
     lcd.begin(16, 2);
+    lcd.write("Booting.");
 
     // set up DHT
 #if USE_DHT_ROOM_TEMP
@@ -100,14 +114,26 @@ void setup()
 #endif
 
     delay(1000);
+    lcd.write(".");
+#if USE_DT_ROOM_BOILER
+    dtTempBoiler.begin();
+#endif
+
+    uint8_t deviceAddress;
+    dtTempBoiler.getAddress(&deviceAddress, 0);
+    dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
+    dtTempBoiler.setWaitForConversion(false);
+
+    lcd.write(".");
 
     eepromInit();
-    Serial.println("Thermoino 1, built:" __DATE__ " " __TIME__ " (" __FILE__ ") - Setup finished.");
+    Serial.println(F("Thermoino 1, built:" __DATE__ " " __TIME__ " (" __FILE__ ") - Setup finished."));
     t_stateUpdate_readButtons.enable();
     t_stateUpdate_readSensors.enable();
-    t_stateUpdate_angleAndRelay.enable();
-    t_effect_refreshServoAndRelay.enable();
-    t_effect_printStatus.enable();
+    notifyTask(&t_effect_printStatus, false);
+    notifyTask(&t_stateUpdate_angleAndRelay, false);
+    lcd.print(F("ok"));
+    Serial.println(F("Setup finished..."));
 }
 
 void loop()
@@ -117,10 +143,11 @@ void loop()
 
 void stateUpdate_readSensors_cb()
 {
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_ENTRY("stateUpdate_readSensors");
+#endif
     const float lastBoilerTemp = boilerTemp;
     const float lastRoomTemp = roomTemp;
-
-    boilerTemp = readTemp(BOILER_THERM_PIN);
 
 #if USE_DHT_ROOM_TEMP
     sensors_event_t event;
@@ -131,6 +158,15 @@ void stateUpdate_readSensors_cb()
     roomHumidity = event.relative_humidity;
 #else
     roomTemp = readTemp(ROOM_THERM_PIN);
+#endif
+
+#if USE_DT_ROOM_BOILER
+    uint8_t deviceAddress;
+    dtTempBoiler.getAddress(&deviceAddress, 0);
+    boilerTemp = dtTempBoiler.getTempC(&deviceAddress);
+    dtTempBoiler.requestTemperaturesByAddress(&deviceAddress); // make ready for next call
+#else
+    boilerTemp = readTemp(BOILER_THERM_PIN);
 #endif
 
     // roomTemp is not NaN
@@ -144,11 +180,24 @@ void stateUpdate_readSensors_cb()
 
         Serial.println("DRQ:RT:" + String(roomTemp));
         Serial.println("DRQ:BT:" + String(boilerTemp));
+    } else {
+#if DEBUG_LEVEL > 1
+        DEBUG_SER_PRINT(boilerTemp);
+        DEBUG_SER_PRINT(lastBoilerTemp);
+        DEBUG_SER_PRINT(roomTemp);
+        DEBUG_SER_PRINT_LN(lastRoomTemp);
+#endif
     }
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_RET("stateUpdate_readSensors");
+#endif
 }
 
 void stateUpdate_angleAndRelay_cb()
 {
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_ENTRY("stateUpdate_angleAndRelay");
+#endif
     heatNeeded = (heatNeeded && (roomTemp - config.refTempRoom <= (config.debounceLimitC / 2))) ||
                  (roomTemp - config.refTempRoom <= -(config.debounceLimitC / 2));
 
@@ -192,10 +241,16 @@ void stateUpdate_angleAndRelay_cb()
         Serial.println("DRQ:O:" + String(angle));
         Serial.println("DRQ:HN:" + String(heatNeeded));
     }
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_RET("stateUpdate_angleAndRelay");
+#endif
 }
 
 void effect_refreshServoAndRelay_cb()
 {
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_ENTRY("effect_refreshServoAndRelay");
+#endif
     const bool circuitRelayOrOverride = config.circuitRelayForced == 0 ? circuitRelay : config.circuitRelayForced == 1;
     if (settingsSelected == 3) {
         servoSetPos(100);
@@ -212,10 +267,16 @@ void effect_refreshServoAndRelay_cb()
         sendCurrentStateToRelay(circuitRelayOrOverride);
     }
     Serial.println("DRQ:R:" + String(circuitRelayOrOverride));
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_RET("effect_refreshServoAndRelay");
+#endif
 }
 
 void effect_printStatus_cb()
 {
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_ENTRY("effect_printStatus");
+#endif
     printStatus();
 #if DEBUG_LEVEL > 1
     DEBUG_SER_PRINT(boilerTemp);
@@ -224,15 +285,33 @@ void effect_printStatus_cb()
     DEBUG_SER_PRINT(overheating);
     DEBUG_SER_PRINT_LN(underheating);
 #endif
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_RET("effect_printStatus");
+#endif
 }
 
 void stateUpdate_readButtons_cb()
 {
+#if DEBUG_LEVEL > 1
+    DEBUG_TASK_ENTRY("stateUpdate_readButtons");
+#endif
     if (processSettings()) {
+        notifyTask(&t_effect_printStatus, true);
         notifyTask(&t_stateUpdate_angleAndRelay, true);
         notifyTask(&t_effect_refreshServoAndRelay, true);
-        notifyTask(&t_effect_printStatus, true);
+        notifyTask(&t_effect_processSettings, false);
     }
+#if DEBUG_LEVEL > 1
+    DEBUG_TASK_RET("stateUpdate_readButtons");
+#endif
+}
+
+void effect_processSettings_cb()
+{
+#if DEBUG_LEVEL > 1
+    DEBUG_TASK_ENTRY("stateUpdate_readButtons");
+#endif
+    eepromUpdate();
 }
 
 void notifyTask(Task *task, bool immediate)
@@ -273,11 +352,11 @@ float readTemp(uint8_t pin)
     return lround(T * 16) / 16.0f;
 }
 
-int8_t readButton(Button_t button)
+int8_t readButton(Button_t *button)
 {
-    int btn = digitalRead(button.pin);
-    if (btn != *button.state) {
-        *button.state = btn;
+    int btn = digitalRead(button->pin);
+    if (btn != button->state) {
+        button->state = btn;
         if (btn == LOW) {
             return 1; // released
         } else if (btn == HIGH) {
@@ -289,22 +368,21 @@ int8_t readButton(Button_t button)
 
 #include "menu.h"
 
-uint8_t btnStates[4] = {LOW, LOW, LOW, LOW};
-const Button_t btn1 = {
+Button_t btn1 = {
     .pin = BTN_1_PIN,
-    .state = &btnStates[0]
+    .state = LOW
 };
-const Button_t btn2 = {
+Button_t btn2 = {
     .pin = BTN_2_PIN,
-    .state = &btnStates[1]
+    .state = LOW
 };
-const Button_t btn3 = {
+Button_t btn3 = {
     .pin = BTN_3_PIN,
-    .state = &btnStates[2]
+    .state = LOW
 };
-const Button_t btn4 = {
+Button_t btn4 = {
     .pin = BTN_4_PIN,
-    .state = &btnStates[3]
+    .state = LOW
 };
 
 void servoSetPos(int positionPercent)
@@ -371,11 +449,15 @@ void printStatusOverview()
 
 void printStatus()
 {
+    if (settingsSelected != settingsSelectedPrint) {
+        lcd.clear();
+    }
     if (settingsSelected >= 0) {
         printSettings();
     } else {
         printStatusOverview();
     }
+    settingsSelectedPrint = settingsSelected;
 }
 
 #define MAX_MENU_ITEMS (MENU_STATIC_ITEMS + (config.curveItems * 2) + 1)
@@ -383,34 +465,29 @@ void printStatus()
 bool processSettings()
 {
     bool stateChanged = false;
-    if (readButton(btn1) == 1) {
+    if (readButton(&btn1) == 1) {
         stateChanged = true;
         settingsSelected = settingsSelected - 1;
         if (settingsSelected == -2) {
             settingsSelected = MAX_MENU_ITEMS - 2;
         }
-        lcd.clear();
     }
-    if (readButton(btn2) == 1) {
+    if (readButton(&btn2) == 1) {
         stateChanged = true;
         settingsSelected = settingsSelected + 1;
         if (settingsSelected == MAX_MENU_ITEMS - 1) {
             settingsSelected = -1;
         }
-        lcd.clear();
     }
     if (settingsSelected >= 0) {
         const ConfigMenuItem_t *currentItem = getMenu(settingsSelected);
-        if (readButton(btn3) == 1) {
+        if (readButton(&btn3) == 1) {
             stateChanged = true;
             currentItem->handler(currentItem->param, -1);
         }
-        if (readButton(btn4) == 1) {
+        if (readButton(&btn4) == 1) {
             stateChanged = true;
             currentItem->handler(currentItem->param, 1);
-        }
-        if (stateChanged) {
-            eepromUpdate();
         }
     }
     return stateChanged;

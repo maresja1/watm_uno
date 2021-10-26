@@ -1,6 +1,7 @@
-#define DEBUG_LEVEL 2
-#define SERVO_PIN 3
-#define CIRCUIT_RELAY_PIN 2
+#define DEBUG_LEVEL 1
+#define DT_BOILER_PIN 11
+#define SERVO_PIN 10
+#define CIRCUIT_RELAY_PIN 9
 #define DHT21_PIN 8
 #define BTN_1_PIN 6
 #define BTN_2_PIN 7
@@ -10,6 +11,15 @@
 #define ROOM_THERM_PIN A1
 
 #define USE_DHT_ROOM_TEMP 1
+#define USE_DT_ROOM_BOILER 1
+
+#if 1
+#define DEBUG_TASK_ENTRY(x) do { Serial.print(F(#x" - e")); Serial.println(""); } while(0)
+#define DEBUG_TASK_RET(x) do { Serial.print(F(#x" - r")); Serial.println(""); } while(0)
+#else
+#define DEBUG_TASK_ENTRY(x)
+#define DEBUG_TASK_RET(x)
+#endif
 
 #define DEBUG_SER_PRINT(x) do { Serial.print(#x": "); Serial.print(x); Serial.print(", "); } while(0)
 #define DEBUG_SER_PRINT_LN(x) do { Serial.print(#x": "); Serial.print(x); Serial.println(""); } while(0)
@@ -40,7 +50,7 @@ struct Configuration {
 
 typedef struct Button {
     uint8_t pin;
-    uint8_t *state;
+    uint8_t state;
 } Button_t;
 
 void eepromInit();
