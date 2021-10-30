@@ -39,7 +39,7 @@ LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 #if USE_DHT_ROOM_TEMP
 // instance of digital thermometer
-DHT_Unified digitalThermometer(DHT21_PIN, DHT21);
+DHT digitalThermometer(DHT21_PIN, DHT21);
 #endif
 
 #if USE_DT_ROOM_BOILER
@@ -85,6 +85,8 @@ bool overheating = false;
 bool underheating = false;
 bool circuitRelay = false;
 
+uint8_t deviceAddress;
+
 void setup()
 {
     Serial.begin(9600);
@@ -106,7 +108,7 @@ void setup()
 
     // set up the LCD's number of columns and rows:
     lcd.begin(16, 2);
-    lcd.write("Booting.");
+    lcd.print(F("Booting"));
 
     // set up DHT
 #if USE_DHT_ROOM_TEMP
@@ -119,11 +121,15 @@ void setup()
     dtTempBoiler.begin();
 #endif
 
-    uint8_t deviceAddress;
     dtTempBoiler.getAddress(&deviceAddress, 0);
     dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
     dtTempBoiler.setWaitForConversion(false);
 
+    lcd.write(".");
+
+    servoSetPos(angle);
+    delay(1000);
+    sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
 
     eepromInit();
@@ -150,19 +156,13 @@ void stateUpdate_readSensors_cb()
     const float lastRoomTemp = roomTemp;
 
 #if USE_DHT_ROOM_TEMP
-    sensors_event_t event;
-    digitalThermometer.temperature().getEvent(&event);
-    roomTemp = event.temperature;
-
-    digitalThermometer.humidity().getEvent(&event);
-    roomHumidity = event.relative_humidity;
+    roomTemp = digitalThermometer.readTemperature(false, false);
+    roomHumidity = digitalThermometer.readHumidity(false);
 #else
     roomTemp = readTemp(ROOM_THERM_PIN);
 #endif
 
 #if USE_DT_ROOM_BOILER
-    uint8_t deviceAddress;
-    dtTempBoiler.getAddress(&deviceAddress, 0);
     boilerTemp = dtTempBoiler.getTempC(&deviceAddress);
     dtTempBoiler.requestTemperaturesByAddress(&deviceAddress); // make ready for next call
 #else
@@ -238,8 +238,10 @@ void stateUpdate_angleAndRelay_cb()
     if (lastAngle != angle || lastCircuitRelay != circuitRelay) {
         notifyTask(&t_effect_refreshServoAndRelay, false);
         notifyTask(&t_effect_printStatus, true);
-        Serial.println("DRQ:O:" + String(angle));
-        Serial.println("DRQ:HN:" + String(heatNeeded));
+        Serial.print(F("DRQ:O:"));
+        Serial.println(angle);
+        Serial.print(F("DRQ:HN:"));
+        Serial.println(heatNeeded);
     }
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_RET("stateUpdate_angleAndRelay");
@@ -253,10 +255,10 @@ void effect_refreshServoAndRelay_cb()
 #endif
     const bool circuitRelayOrOverride = config.circuitRelayForced == 0 ? circuitRelay : config.circuitRelayForced == 1;
     if (settingsSelected == 3) {
-        servoSetPos(100);
+        servoSetPos(0);
         sendCurrentStateToRelay(circuitRelayOrOverride);
     } else if (settingsSelected == 4) {
-        servoSetPos(0);
+        servoSetPos(99);
         sendCurrentStateToRelay(circuitRelayOrOverride);
     } else if (boilerTemp > 85) {
         // safety mechanism
@@ -266,7 +268,8 @@ void effect_refreshServoAndRelay_cb()
         servoSetPos(angle);
         sendCurrentStateToRelay(circuitRelayOrOverride);
     }
-    Serial.println("DRQ:R:" + String(circuitRelayOrOverride));
+    Serial.print(F("DRQ:R:"));
+    Serial.println(String(circuitRelayOrOverride));
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_RET("effect_refreshServoAndRelay");
 #endif
