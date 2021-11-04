@@ -29,7 +29,7 @@ Scheduler runner;
 //Tasks
 Task t_stateUpdate_readButtons(100, -1, &stateUpdate_readButtons_cb, &runner);
 Task t_stateUpdate_angleAndRelay(1000, 1, &stateUpdate_angleAndRelay_cb, &runner);
-Task t_stateUpdate_readSensors(2000, -1, &stateUpdate_readSensors_cb, &runner);
+Task t_stateUpdate_readSensors(4000, -1, &stateUpdate_readSensors_cb, &runner);
 Task t_effect_refreshServoAndRelay(6000, 1, &effect_refreshServoAndRelay_cb, &runner);
 Task t_effect_printStatus(1000, 1, &effect_printStatus_cb, &runner);
 Task t_effect_processSettings(800, 1, &effect_processSettings_cb, &runner);
@@ -89,7 +89,7 @@ uint8_t deviceAddress;
 
 void setup()
 {
-    Serial.begin(9600);
+    Serial.begin(115200);
 
     for (int i = 0; i < 10 && !Serial; ++i) {
         // wait for serial port to connect. Needed for native USB port only
