@@ -1,3 +1,19 @@
+void *menuHandlerGate(__attribute__((unused)) void *param, int8_t diff)
+{
+    angle += (diff * 5);
+    if (angle < 0 || angle > 200 /* overflow */) {
+        angle = 0;
+    }
+    if (angle >= 100) {
+        angle = 99;
+    }
+    if (diff != 0 && angle % 5 != 0) {
+        angle = (angle / 5) * 5;
+    }
+    currAngle = angle;
+    return &angle;
+}
+
 void *menuHandlerBoiler(__attribute__((unused)) void *param, int8_t diff)
 {
     config.refTempBoiler += diff;
@@ -166,8 +182,14 @@ void menuFormatterCircuitOverride(__attribute__((unused)) void *param, char *pBu
     }
 }
 
-#define MENU_STATIC_ITEMS 14
+#define MENU_STATIC_ITEMS 15
 const ConfigMenuItem_t menu[] = {
+        {
+                .name = "Manual %",
+                .param = nullptr,
+                .handler = &menuHandlerGate,
+                .formatter = &menuFormatterUInt8Value
+        },
         {
                 .name = "Boiler \xDF",
                 .param = nullptr,

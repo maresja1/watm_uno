@@ -13,7 +13,7 @@
 #define USE_DHT_ROOM_TEMP 1
 #define USE_DT_ROOM_BOILER 1
 
-#if 1
+#if 0
 #define DEBUG_TASK_ENTRY(x) do { Serial.print(F(#x" - e")); Serial.println(""); } while(0)
 #define DEBUG_TASK_RET(x) do { Serial.print(F(#x" - r")); Serial.println(""); } while(0)
 #else
@@ -23,6 +23,10 @@
 
 #define DEBUG_SER_PRINT(x) do { Serial.print(#x": "); Serial.print(x); Serial.print(", "); } while(0)
 #define DEBUG_SER_PRINT_LN(x) do { Serial.print(#x": "); Serial.print(x); Serial.println(""); } while(0)
+
+#define MENU_POS_GATE_MANUAL 0
+#define MENU_POS_SERVO_MIN 4
+#define MENU_POS_SERVO_MAX 5
 
 typedef struct ConfigMenuItem {
     const char *name;
@@ -51,6 +55,7 @@ struct Configuration {
 typedef struct Button {
     uint8_t pin;
     uint8_t state;
+    uint8_t pressedFor;
 } Button_t;
 
 void eepromInit();

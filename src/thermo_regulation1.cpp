@@ -29,7 +29,7 @@ Scheduler runner;
 //Tasks
 Task t_stateUpdate_readButtons(100, -1, &stateUpdate_readButtons_cb, &runner);
 Task t_stateUpdate_angleAndRelay(1000, 1, &stateUpdate_angleAndRelay_cb, &runner);
-Task t_stateUpdate_readSensors(4000, -1, &stateUpdate_readSensors_cb, &runner);
+Task t_stateUpdate_readSensors(10000, -1, &stateUpdate_readSensors_cb, &runner);
 Task t_effect_refreshServoAndRelay(6000, 1, &effect_refreshServoAndRelay_cb, &runner);
 Task t_effect_printStatus(1000, 1, &effect_printStatus_cb, &runner);
 Task t_effect_processSettings(800, 1, &effect_processSettings_cb, &runner);
@@ -74,7 +74,8 @@ Configuration config = {
 #define MAX_BUFFER_LEN 20
 char buffer[MAX_BUFFER_LEN];
 
-uint8_t angle = 99;
+uint8_t angle = 20;
+uint8_t currAngle = 20;
 int16_t settingsSelected = -1;
 int16_t settingsSelectedPrint = -1;
 float boilerTemp = 0.0f;
@@ -96,6 +97,9 @@ void setup()
         delay(10);
     }
 
+    eepromInit();
+
+    servoSetPos(angle);
     servo.attach(SERVO_PIN);
     analogReference(EXTERNAL);
     pinMode(SERVO_PIN, OUTPUT);
@@ -127,12 +131,10 @@ void setup()
 
     lcd.write(".");
 
-    servoSetPos(angle);
     delay(1000);
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
 
-    eepromInit();
     Serial.println(F("Thermoino 1, built:" __DATE__ " " __TIME__ " (" __FILE__ ") - Setup finished."));
     t_stateUpdate_readButtons.enable();
     t_stateUpdate_readSensors.enable();
@@ -201,7 +203,8 @@ void stateUpdate_angleAndRelay_cb()
     heatNeeded = (heatNeeded && (roomTemp - config.refTempRoom <= (config.debounceLimitC / 2))) ||
                  (roomTemp - config.refTempRoom <= -(config.debounceLimitC / 2));
 
-    const float boilerDelta = boilerTemp - float(heatNeeded ? config.refTempBoiler : config.refTempBoilerIdle);
+//    const float boilerDelta = boilerTemp - float(heatNeeded ? config.refTempBoiler : config.refTempBoilerIdle);
+    const float boilerDelta = boilerTemp - config.refTempBoiler;
 
     overheating = (overheating && (boilerTemp - config.overheatingLimit >= (config.debounceLimitC / 2))) ||
                   (boilerTemp - config.overheatingLimit >= -(config.debounceLimitC / 2));
@@ -213,29 +216,37 @@ void stateUpdate_angleAndRelay_cb()
     circuitRelay = !underheating && (heatNeeded || overheating);
 
     uint8_t lastAngle = angle;
-    angle = 99;
+    if (settingsSelected == MENU_POS_GATE_MANUAL) {
+        // setting is manual, make no changes
+    } else if (settingsSelected == MENU_POS_SERVO_MIN) {
+        angle = 0;
+    } else if (settingsSelected == MENU_POS_SERVO_MAX) {
+        angle = 99;
+    } else {
+        angle = 99;
 
-    for (int i = config.curveItems - 1; i >= 0; i--) {
-        if (boilerDelta >= maxDeltaSettings[i]) {
-            int nextAngle = maxDeltaHigh[i];
-            int nextI = i + 1;
-            if (nextI < config.curveItems) {
-                // linear interpolation
-                nextAngle = float(maxDeltaHigh[i]) +
-                    (
-                        (boilerDelta - float(maxDeltaSettings[i])) *
-                        (
-                            float(maxDeltaHigh[nextI] - maxDeltaHigh[i]) /
-                            float(maxDeltaSettings[nextI] - maxDeltaSettings[i])
-                        )
-                    );
+        for (int i = config.curveItems - 1; i >= 0; i--) {
+            if (boilerDelta >= maxDeltaSettings[i]) {
+                int nextAngle = maxDeltaHigh[i];
+                int nextI = i + 1;
+                if (nextI < config.curveItems) {
+                    // linear interpolation
+                    nextAngle = float(maxDeltaHigh[i]) +
+                                (
+                                        (boilerDelta - float(maxDeltaSettings[i])) *
+                                        (
+                                                float(maxDeltaHigh[nextI] - maxDeltaHigh[i]) /
+                                                float(maxDeltaSettings[nextI] - maxDeltaSettings[i])
+                                        )
+                                );
+                }
+                angle = nextAngle;
+                break;
             }
-            angle = nextAngle;
-            break;
         }
     }
 
-    if (lastAngle != angle || lastCircuitRelay != circuitRelay) {
+    if (settingsSelected == -1 && (lastAngle != angle || lastCircuitRelay != circuitRelay)) {
         notifyTask(&t_effect_refreshServoAndRelay, false);
         notifyTask(&t_effect_printStatus, true);
         Serial.print(F("DRQ:O:"));
@@ -248,24 +259,29 @@ void stateUpdate_angleAndRelay_cb()
 #endif
 }
 
+#define MAX_SERVO_STEP 4
+
 void effect_refreshServoAndRelay_cb()
 {
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_ENTRY("effect_refreshServoAndRelay");
 #endif
     const bool circuitRelayOrOverride = config.circuitRelayForced == 0 ? circuitRelay : config.circuitRelayForced == 1;
-    if (settingsSelected == 3) {
-        servoSetPos(0);
-        sendCurrentStateToRelay(circuitRelayOrOverride);
-    } else if (settingsSelected == 4) {
-        servoSetPos(99);
-        sendCurrentStateToRelay(circuitRelayOrOverride);
-    } else if (boilerTemp > 85) {
+    if (boilerTemp > 90) {
         // safety mechanism
         servoSetPos(0);
         sendCurrentStateToRelay(true);
     } else {
-        servoSetPos(angle);
+        if (angle > currAngle + MAX_SERVO_STEP) {
+            currAngle += MAX_SERVO_STEP;
+            t_effect_refreshServoAndRelay.restartDelayed(100);
+        } else if (angle < currAngle - MAX_SERVO_STEP) {
+            currAngle -= MAX_SERVO_STEP;
+            t_effect_refreshServoAndRelay.restartDelayed(100);
+        } else {
+            currAngle = angle;
+        }
+        servoSetPos(currAngle);
         sendCurrentStateToRelay(circuitRelayOrOverride);
     }
     Serial.print(F("DRQ:R:"));
@@ -359,12 +375,15 @@ int8_t readButton(Button_t *button)
 {
     int btn = digitalRead(button->pin);
     if (btn != button->state) {
+        button->pressedFor = 0;
         button->state = btn;
         if (btn == LOW) {
             return 1; // released
         } else if (btn == HIGH) {
             return -1; // pressed
         }
+    } else if(btn == LOW) {
+        button->pressedFor++;
     }
     return 0;
 }
@@ -392,7 +411,10 @@ void servoSetPos(int positionPercent)
 {
     // int time = 1500 + ((positionPercent - 50)*step);
     float multi = float(config.servoMax - config.servoMin) / 100.0f;
-    servo.write(int16_t((100.0f - positionPercent + config.servoMin) * float(multi)));
+    int16_t value = config.servoMin + int16_t(float(positionPercent) * float(multi));
+    DEBUG_SER_PRINT_LN(value);
+    // the minus is to switch direction, 180 is constant used in method write as a maximum,
+    servo.write(180 - value);
 }
 
 void printSettings()
@@ -487,8 +509,15 @@ bool processSettings()
         if (readButton(&btn3) == 1) {
             stateChanged = true;
             currentItem->handler(currentItem->param, -1);
+        } else if (btn3.pressedFor > 10) {
+            stateChanged = true;
+            currentItem->handler(currentItem->param, -1);
         }
+
         if (readButton(&btn4) == 1) {
+            stateChanged = true;
+            currentItem->handler(currentItem->param, 1);
+        } else if (btn4.pressedFor > 10) {
             stateChanged = true;
             currentItem->handler(currentItem->param, 1);
         }
@@ -497,7 +526,7 @@ bool processSettings()
 }
 
 
-#define EEPROM_MAGIC 0xDEADBEEF
+#define EEPROM_MAGIC 0xDEADBE00
 
 void eepromInit()
 {
