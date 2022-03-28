@@ -18,6 +18,8 @@
 
 void notifyTask(Task *task, bool immediate);
 
+
+void stateUpdate_hotWaterProbe_cb();
 void stateUpdate_readSensors_cb();
 void effect_refreshServoAndRelay_cb();
 void effect_printStatus_cb();
@@ -27,12 +29,20 @@ void effect_processSettings_cb();
 
 Scheduler runner;
 //Tasks
+// periodic task to read state of buttons - might enable other tasks, if needed
 Task t_stateUpdate_readButtons(100, -1, &stateUpdate_readButtons_cb, &runner);
+// one-shot task to compute desired gate angle and relay status - enabled if status changes require recalculation
 Task t_stateUpdate_angleAndRelay(1000, 1, &stateUpdate_angleAndRelay_cb, &runner);
+// periodic task to read sensors - temperatures, might enable other tasks
 Task t_stateUpdate_readSensors(10000, -1, &stateUpdate_readSensors_cb, &runner);
+// periodic task for hot water probe - allows relay to let some water through once in a while to allow for better measurement
+Task t_stateUpdate_hotWaterProbe(10000, -1, &stateUpdate_hotWaterProbe_cb, &runner);
+// one-shot effect task to update desired settings of the gate angle and circuit relay - triggered by other tasks
 Task t_effect_refreshServoAndRelay(6000, 1, &effect_refreshServoAndRelay_cb, &runner);
+// one-shot effect task to print current status to LCD - triggered by other tasks when smth. changes
 Task t_effect_printStatus(1000, 1, &effect_printStatus_cb, &runner);
-Task t_effect_processSettings(800, 1, &effect_processSettings_cb, &runner);
+// one-shot effect task to save current settings to EEPROM - should always be planned with a delay to avoid too many overwrites
+Task t_effect_processSettings(2000, 1, &effect_processSettings_cb, &runner);
 
 // initialize the library with the numbers of the interface pins
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
@@ -47,7 +57,7 @@ OneWire oneWire_TempBoiler(DT_BOILER_PIN);
 DallasTemperature dtTempBoiler(&oneWire_TempBoiler);
 #endif
 
-// servo allowing air to come in the boiler
+// servo allowing air to come in the boiler (attached to the gate)
 Servo servo;
 
 #define MAX_DELTA_SETTINGS 10
@@ -86,6 +96,11 @@ bool heatNeeded = false;
 bool overheating = false;
 bool underheating = false;
 bool circuitRelay = false;
+
+// hot water probe - periodically allow water to flow for 10s
+bool hotWaterProbeHadRelayOn = false;
+bool hotWaterProbeEnforced = false;
+uint8_t hotWaterProbeCycles = 0;
 
 uint8_t deviceAddress;
 
@@ -127,18 +142,18 @@ void setup()
 #endif
 
     dtTempBoiler.getAddress(&deviceAddress, 0);
-    dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
     dtTempBoiler.setWaitForConversion(false);
+    dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
 
     lcd.write(".");
 
-    delay(1000);
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
 
     Serial.println(F("Thermoino 1, built:" __DATE__ " " __TIME__ " (" __FILE__ ") - Setup finished."));
     t_stateUpdate_readButtons.enable();
     t_stateUpdate_readSensors.enable();
+    t_stateUpdate_hotWaterProbe.enable();
     notifyTask(&t_effect_printStatus, false);
     notifyTask(&t_stateUpdate_angleAndRelay, false);
     lcd.print(F("ok"));
@@ -148,6 +163,27 @@ void setup()
 void loop()
 {
     runner.execute();
+}
+
+void stateUpdate_hotWaterProbe_cb()
+{
+    if (settingsSelected != -1) {
+        return; // hot water probe disabled in settings
+    }
+    hotWaterProbeCycles++;
+    if (hotWaterProbeCycles > 5) {
+        hotWaterProbeCycles = 0;
+        if (!hotWaterProbeHadRelayOn) {
+            hotWaterProbeEnforced = true;
+            notifyTask(&t_stateUpdate_angleAndRelay, false);
+            notifyTask(&t_effect_printStatus, false);
+        }
+    } else if(hotWaterProbeEnforced) {
+        // turn off after one cycle of being on
+        hotWaterProbeEnforced = false;
+        notifyTask(&t_stateUpdate_angleAndRelay, false);
+        notifyTask(&t_effect_printStatus, false);
+    }
 }
 
 void stateUpdate_readSensors_cb()
@@ -219,7 +255,7 @@ void stateUpdate_angleAndRelay_cb()
                    (boilerTemp - config.underheatingLimit <= -(config.debounceLimitC / 2));
 
     bool lastCircuitRelay = circuitRelay;
-    circuitRelay = !underheating && (heatNeeded || overheating);
+    circuitRelay = (!underheating && (heatNeeded || overheating)) || hotWaterProbeEnforced;
 
     uint8_t lastAngle = angle;
     if (settingsSelected == MENU_POS_GATE_MANUAL) {
@@ -350,6 +386,7 @@ void notifyTask(Task *task, bool immediate)
 }
 
 void sendCurrentStateToRelay(const bool state) {
+    hotWaterProbeHadRelayOn |= state;
     digitalWrite(CIRCUIT_RELAY_PIN, !state);
 }
 
@@ -510,6 +547,7 @@ bool processSettings()
             settingsSelected = -1;
         }
     }
+    bool anyPressed = stateChanged;
     if (settingsSelected >= 0) {
         const ConfigMenuItem_t *currentItem = getMenu(settingsSelected);
         if (readButton(&btn3) == 1) {
@@ -526,6 +564,29 @@ bool processSettings()
         } else if (btn4.pressedFor > 10) {
             stateChanged = true;
             currentItem->handler(currentItem->param, 1);
+        }
+    } else if (!anyPressed) {
+        anyPressed = readButton(&btn3) || readButton(&btn4);
+    }
+    // backlight screensaver
+    static uint16_t noPressCycles = 0;
+    if (anyPressed) {
+        if (noPressCycles == 101) {
+#if DEBUG_LEVEL > 1
+            Serial.println("Backlight - off");
+#endif
+            lcd.backlight();
+        }
+        noPressCycles = 0;
+    } else {
+        if (noPressCycles >= 100) {
+#if DEBUG_LEVEL > 1
+            Serial.println("Backlight - on");
+#endif
+            lcd.noBacklight();
+            noPressCycles = 101;
+        } else {
+            noPressCycles++;
         }
     }
     return stateChanged;

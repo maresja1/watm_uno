@@ -7,7 +7,7 @@ void *menuHandlerGate(__attribute__((unused)) void *param, int8_t diff)
     if (angle >= 100) {
         angle = 99;
     }
-    if (diff != 0 && angle % 5 != 0) {
+    if (diff != 0 && angle != 99 && angle % 5 != 0) {
         angle = (angle / 5) * 5;
     }
     currAngle = angle;
@@ -215,7 +215,7 @@ const ConfigMenuItem_t menu[] = {
                 .formatter = &menuFormatterCircuitOverride
         },
         {
-                .name = "[E] Roof Temp adj.",
+                .name = "[E] Room Temp adj.",
                 .param = nullptr,
                 .handler = &menuHandlerRoomTempAdjust,
                 .formatter = &menuFormatterFloatValue

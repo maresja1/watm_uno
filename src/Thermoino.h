@@ -25,8 +25,8 @@
 #define DEBUG_SER_PRINT_LN(x) do { Serial.print(#x": "); Serial.print(x); Serial.println(""); } while(0)
 
 #define MENU_POS_GATE_MANUAL 0
-#define MENU_POS_SERVO_MIN 4
-#define MENU_POS_SERVO_MAX 5
+#define MENU_POS_SERVO_MIN 5
+#define MENU_POS_SERVO_MAX 6
 
 typedef struct ConfigMenuItem {
     const char *name;
