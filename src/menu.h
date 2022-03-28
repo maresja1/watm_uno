@@ -32,6 +32,12 @@ void *menuHandlerRoom(__attribute__((unused)) void *param, int8_t diff)
     return &config.refTempRoom;
 }
 
+void *menuHandlerRoomTempAdjust(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.roomTempAdjust += float(diff) * 0.1f;
+    return &config.roomTempAdjust;
+}
+
 void *menuHandlerDebounceLimitC(__attribute__((unused)) void *param, int8_t diff)
 {
     config.debounceLimitC += float(diff) * 0.1f;
@@ -182,7 +188,7 @@ void menuFormatterCircuitOverride(__attribute__((unused)) void *param, char *pBu
     }
 }
 
-#define MENU_STATIC_ITEMS 15
+#define MENU_STATIC_ITEMS 16
 const ConfigMenuItem_t menu[] = {
         {
                 .name = "Manual %",
@@ -207,6 +213,12 @@ const ConfigMenuItem_t menu[] = {
                 .param = nullptr,
                 .handler = &menuHandlerCircuitRelayForced,
                 .formatter = &menuFormatterCircuitOverride
+        },
+        {
+                .name = "[E] Roof Temp adj.",
+                .param = nullptr,
+                .handler = &menuHandlerRoomTempAdjust,
+                .formatter = &menuFormatterFloatValue
         },
         {
                 .name = "[E] Servo Min",

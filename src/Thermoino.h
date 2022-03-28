@@ -50,6 +50,7 @@ struct Configuration {
     // [boilerTemp - roomTemp, real boilerTemp - boilerTemp]
     float deltaTempPoly1;
     float deltaTempPoly0;
+    float roomTempAdjust;
 };
 
 typedef struct Button {

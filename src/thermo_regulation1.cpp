@@ -68,7 +68,8 @@ Configuration config = {
     .overheatingLimit = 80,
     // least squares of (1,2), (20,6), (44,12) - y = 0.2333x + 1.612
     .deltaTempPoly1 = 0.0f, //0.2333f,
-    .deltaTempPoly0 = 0.0f//1.612f
+    .deltaTempPoly0 = 0.0f, //1.612f,
+    .roomTempAdjust = 0.0f //1.612f
 };
 
 #define MAX_BUFFER_LEN 20
@@ -158,7 +159,12 @@ void stateUpdate_readSensors_cb()
     const float lastRoomTemp = roomTemp;
 
 #if USE_DHT_ROOM_TEMP
-    roomTemp = digitalThermometer.readTemperature(false, false);
+    float lastReading = digitalThermometer.readTemperature(false, false) + config.roomTempAdjust;
+    if (roomTemp > 0.0f) {
+        roomTemp = (lastReading + (4 * roomTemp)) / 5; // running average
+    } else {
+        roomTemp = lastReading;
+    }
     roomHumidity = digitalThermometer.readHumidity(false);
 #else
     roomTemp = readTemp(ROOM_THERM_PIN);
@@ -526,7 +532,7 @@ bool processSettings()
 }
 
 
-#define EEPROM_MAGIC 0xDEADBE00
+#define EEPROM_MAGIC 0xDEADBE01
 
 void eepromInit()
 {
