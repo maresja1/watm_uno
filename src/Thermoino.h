@@ -51,6 +51,9 @@ struct Configuration {
     float deltaTempPoly1;
     float deltaTempPoly0;
     float roomTempAdjust;
+    float pidKp;
+    float pidKi;
+    float pidKd;
 };
 
 typedef struct Button {

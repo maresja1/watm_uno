@@ -3,6 +3,8 @@
 #include "Thermoino.h"
 
 #include <EEPROM.h>
+#include <PID_v1.h>
+
 #if USE_DHT_ROOM_TEMP
 #include <DHT.h>
 #include <DHT_U.h>
@@ -35,7 +37,7 @@ Task t_stateUpdate_readButtons(100, -1, &stateUpdate_readButtons_cb, &runner);
 // one-shot task to compute desired gate angle and relay status - enabled if status changes require recalculation
 Task t_stateUpdate_angleAndRelay(1000, 1, &stateUpdate_angleAndRelay_cb, &runner);
 // periodic task to read sensors - temperatures, might enable other tasks
-Task t_stateUpdate_readSensors(10000, -1, &stateUpdate_readSensors_cb, &runner);
+Task t_stateUpdate_readSensors(2000, -1, &stateUpdate_readSensors_cb, &runner);
 // periodic task for hot water probe - allows relay to let some water through once in a while to allow for better measurement
 Task t_stateUpdate_hotWaterProbe(10000, -1, &stateUpdate_hotWaterProbe_cb, &runner);
 // periodic task to update state based on instructions from the Serial port
@@ -82,7 +84,10 @@ Configuration config = {
     // least squares of (1,2), (20,6), (44,12) - y = 0.2333x + 1.612
     .deltaTempPoly1 = 0.0f, //0.2333f,
     .deltaTempPoly0 = 0.0f, //1.612f,
-    .roomTempAdjust = 0.0f //1.612f
+    .roomTempAdjust = 0.0f, //1.612f.
+    .pidKp = 2.0f,
+    .pidKi = 5.0f,
+    .pidKd = 1.0f,
 };
 
 #define MAX_BUFFER_LEN 20
@@ -108,6 +113,9 @@ uint8_t noPressCycles = 0;
 bool hotWaterProbeHadRelayOn = false;
 bool hotWaterProbeEnforced = false;
 uint8_t hotWaterProbeCycles = 0;
+
+double Setpoint = 0, Input = 0, Output = 0;
+PID myPID(&Input, &Output, &Setpoint, config.pidKp, config.pidKi, config.pidKd, DIRECT);
 
 uint8_t deviceAddress;
 
@@ -152,20 +160,28 @@ void setup()
     dtTempBoiler.setWaitForConversion(false);
     dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
 
-    lcd.write(".");
-
+    myPID.SetOutputLimits(0,99);
+    myPID.SetMode(AUTOMATIC);
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
 
     Serial.println(F("Thermoino 1, built:" __DATE__ " " __TIME__ " (" __FILE__ ") - Setup finished."));
+
     t_stateUpdate_readButtons.enable();
     t_stateUpdate_readSensors.enable();
+
+    lcd.write(".");
+
     t_stateUpdate_hotWaterProbe.enable();
     t_stateUpdate_serialReader.enable();
+
     notifyTask(&t_effect_printStatus, false);
     notifyTask(&t_stateUpdate_angleAndRelay, false);
+
     lcd.print(F("ok"));
     Serial.println(F("Setup finished..."));
+
+    effect_processSettings_cb();
 }
 
 void loop()
@@ -179,9 +195,9 @@ void stateUpdate_serialReader_cb()
         size_t read = Serial.readBytesUntil('\n', buffer, MAX_BUFFER_LEN - 1);
         buffer[read] = '\0';
         const String &sBuffer = String(buffer);
-        if (sBuffer.startsWith("DRQ:")) {
+        if (sBuffer.startsWith(F("DRQ:"))) {
             const String &commandBuffer = sBuffer.substring(4);
-            if (commandBuffer.startsWith("HNO:")) {
+            if (commandBuffer.startsWith(F("HNO:"))) {
                 const String &valueBuffer = commandBuffer.substring(4);
                 heatNeededOverride = strtol(valueBuffer.c_str(), nullptr, 10);
 
@@ -206,7 +222,7 @@ void stateUpdate_serialReader_cb()
                 screenSaverWakeup();
 
                 DEBUG_SER_PRINT_LN(angle);
-            } else if (commandBuffer.startsWith("M:A")) {
+            } else if (commandBuffer.startsWith(F("M:A"))) {
                 settingsSelected = -1;
 
                 notifyTask(&t_effect_printStatus, true);
@@ -216,7 +232,8 @@ void stateUpdate_serialReader_cb()
 
                 screenSaverWakeup();
             } else {
-                Serial.println("Unknown command: " + sBuffer);
+                Serial.print(F("Unknown command: "));
+                Serial.println(sBuffer);
             }
         }
     }
@@ -275,12 +292,17 @@ void stateUpdate_readSensors_cb()
         boilerTemp += (config.deltaTempPoly1 * (boilerTemp - roomTemp)) + config.deltaTempPoly0;
     }
 
+    Input = boilerTemp;
+    myPID.Compute();
+
     if((boilerTemp != lastBoilerTemp) || (roomTemp != lastRoomTemp)) {
         notifyTask(&t_stateUpdate_angleAndRelay, false);
         notifyTask(&t_effect_printStatus, false);
 
-        Serial.println("DRQ:RT:" + String(roomTemp));
-        Serial.println("DRQ:BT:" + String(boilerTemp));
+        Serial.print(F("DRQ:RT:"));
+        Serial.println(String(roomTemp));
+        Serial.print(F("DRQ:BT:"));
+        Serial.println(String(boilerTemp));
     } else {
 #if DEBUG_LEVEL > 1
         DEBUG_SER_PRINT(boilerTemp);
@@ -328,27 +350,27 @@ void stateUpdate_angleAndRelay_cb()
     } else if (settingsSelected == MENU_POS_SERVO_MAX) {
         angle = 99;
     } else {
-        angle = 99;
+        angle = Output;
 
-        for (int i = config.curveItems - 1; i >= 0; i--) {
-            if (boilerDelta >= maxDeltaSettings[i]) {
-                int nextAngle = maxDeltaHigh[i];
-                int nextI = i + 1;
-                if (nextI < config.curveItems) {
-                    // linear interpolation
-                    nextAngle = float(maxDeltaHigh[i]) +
-                                (
-                                        (boilerDelta - float(maxDeltaSettings[i])) *
-                                        (
-                                                float(maxDeltaHigh[nextI] - maxDeltaHigh[i]) /
-                                                float(maxDeltaSettings[nextI] - maxDeltaSettings[i])
-                                        )
-                                );
-                }
-                angle = nextAngle;
-                break;
-            }
-        }
+//        for (int i = config.curveItems - 1; i >= 0; i--) {
+//            if (boilerDelta >= maxDeltaSettings[i]) {
+//                int nextAngle = maxDeltaHigh[i];
+//                int nextI = i + 1;
+//                if (nextI < config.curveItems) {
+//                    // linear interpolation
+//                    nextAngle = float(maxDeltaHigh[i]) +
+//                                (
+//                                        (boilerDelta - float(maxDeltaSettings[i])) *
+//                                        (
+//                                                float(maxDeltaHigh[nextI] - maxDeltaHigh[i]) /
+//                                                float(maxDeltaSettings[nextI] - maxDeltaSettings[i])
+//                                        )
+//                                );
+//                }
+//                angle = nextAngle;
+//                break;
+//            }
+//        }
     }
 
     if (settingsSelected == -1 && (lastAngle != angle || lastCircuitRelay != circuitRelay)) {
@@ -436,6 +458,7 @@ void effect_processSettings_cb()
     DEBUG_TASK_ENTRY("stateUpdate_readButtons");
 #endif
     eepromUpdate();
+    Setpoint = config.refTempBoiler;
     Serial.print(F("DRQ:R:"));
     Serial.println(String(relay_or_override()));
 }
@@ -655,7 +678,7 @@ bool processSettings()
 }
 
 
-#define EEPROM_MAGIC 0xDEADBE01
+#define EEPROM_MAGIC 0xDEADBE02
 
 void eepromInit()
 {

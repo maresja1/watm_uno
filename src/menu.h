@@ -188,7 +188,7 @@ void menuFormatterCircuitOverride(__attribute__((unused)) void *param, char *pBu
     }
 }
 
-#define MENU_STATIC_ITEMS 16
+#define MENU_STATIC_ITEMS 11
 const ConfigMenuItem_t menu[] = {
         {
                 .name = "Manual %",
@@ -250,36 +250,36 @@ const ConfigMenuItem_t menu[] = {
                 .handler = &menuHandlerOverheatingLimit,
                 .formatter = &menuFormatterUInt8Value
         },
-        {
-                .name = "[E] Underheating\xDF",
-                .param = nullptr,
-                .handler = &menuHandlerUnderheatingLimit,
-                .formatter = &menuFormatterUInt8Value
-        },
-        {
-                .name = "[E] deltaT p1",
-                .param = nullptr,
-                .handler = &menuHandlerDeltaTempPoly1,
-                .formatter = &menuFormatterFloatValue
-        },
-        {
-                .name = "[E] deltaT p1 S",
-                .param = nullptr,
-                .handler = &menuHandlerDeltaTempPoly1S,
-                .formatter = &menuFormatterFloatValue
-        },
-        {
-                .name = "[E] deltaT p0",
-                .param = nullptr,
-                .handler = &menuHandlerDeltaTempPoly0,
-                .formatter = &menuFormatterFloatValue
-        },
-        {
-                .name = "[E] deltaT p0 S",
-                .param = nullptr,
-                .handler = &menuHandlerDeltaTempPoly0S,
-                .formatter = &menuFormatterFloatValue
-        },
+//        {
+//                .name = "[E] Underheating\xDF",
+//                .param = nullptr,
+//                .handler = &menuHandlerUnderheatingLimit,
+//                .formatter = &menuFormatterUInt8Value
+//        },
+//        {
+//                .name = "[E] deltaT p1",
+//                .param = nullptr,
+//                .handler = &menuHandlerDeltaTempPoly1,
+//                .formatter = &menuFormatterFloatValue
+//        },
+//        {
+//                .name = "[E] deltaT p1 S",
+//                .param = nullptr,
+//                .handler = &menuHandlerDeltaTempPoly1S,
+//                .formatter = &menuFormatterFloatValue
+//        },
+//        {
+//                .name = "[E] deltaT p0",
+//                .param = nullptr,
+//                .handler = &menuHandlerDeltaTempPoly0,
+//                .formatter = &menuFormatterFloatValue
+//        },
+//        {
+//                .name = "[E] deltaT p0 S",
+//                .param = nullptr,
+//                .handler = &menuHandlerDeltaTempPoly0S,
+//                .formatter = &menuFormatterFloatValue
+//        },
         {
                 .name = "[E] Curve Items",
                 .param = nullptr,
