@@ -67,3 +67,4 @@ void printStatus();
 void servoSetPos(int positionPercent);
 void notifyChangeState(bool immediate);
 void sendCurrentStateToRelay(bool state);
+void screenSaverWakeup();

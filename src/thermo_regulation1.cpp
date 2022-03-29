@@ -19,6 +19,7 @@
 void notifyTask(Task *task, bool immediate);
 
 
+void stateUpdate_serialReader_cb();
 void stateUpdate_hotWaterProbe_cb();
 void stateUpdate_readSensors_cb();
 void effect_refreshServoAndRelay_cb();
@@ -37,6 +38,8 @@ Task t_stateUpdate_angleAndRelay(1000, 1, &stateUpdate_angleAndRelay_cb, &runner
 Task t_stateUpdate_readSensors(10000, -1, &stateUpdate_readSensors_cb, &runner);
 // periodic task for hot water probe - allows relay to let some water through once in a while to allow for better measurement
 Task t_stateUpdate_hotWaterProbe(10000, -1, &stateUpdate_hotWaterProbe_cb, &runner);
+// periodic task to update state based on instructions from the Serial port
+Task t_stateUpdate_serialReader(1000, -1, &stateUpdate_serialReader_cb, &runner);
 // one-shot effect task to update desired settings of the gate angle and circuit relay - triggered by other tasks
 Task t_effect_refreshServoAndRelay(6000, 1, &effect_refreshServoAndRelay_cb, &runner);
 // one-shot effect task to print current status to LCD - triggered by other tasks when smth. changes
@@ -69,7 +72,7 @@ Configuration config = {
     .refTempBoiler = 70,
     .refTempBoilerIdle = 50,
     .refTempRoom = 22.0f,
-    .circuitRelayForced = 0,
+    .circuitRelayForced = 0,  // 0 no override, 1 - override false, 2 or else - override true
     .servoMin = 0,
     .servoMax = 180,
     .curveItems = 5,
@@ -93,9 +96,13 @@ float boilerTemp = 0.0f;
 float roomTemp = 0.0f;
 float roomHumidity = 0.0f;
 bool heatNeeded = false;
+uint8_t heatNeededOverride = 0; // 0 no override, 1 - override false, 2 or else - override true
 bool overheating = false;
 bool underheating = false;
 bool circuitRelay = false;
+
+// backlight screensaver
+uint8_t noPressCycles = 0;
 
 // hot water probe - periodically allow water to flow for 10s
 bool hotWaterProbeHadRelayOn = false;
@@ -154,6 +161,7 @@ void setup()
     t_stateUpdate_readButtons.enable();
     t_stateUpdate_readSensors.enable();
     t_stateUpdate_hotWaterProbe.enable();
+    t_stateUpdate_serialReader.enable();
     notifyTask(&t_effect_printStatus, false);
     notifyTask(&t_stateUpdate_angleAndRelay, false);
     lcd.print(F("ok"));
@@ -163,6 +171,55 @@ void setup()
 void loop()
 {
     runner.execute();
+}
+
+void stateUpdate_serialReader_cb()
+{
+    if (Serial.available() > 0) {
+        size_t read = Serial.readBytesUntil('\n', buffer, MAX_BUFFER_LEN - 1);
+        buffer[read] = '\0';
+        const String &sBuffer = String(buffer);
+        if (sBuffer.startsWith("DRQ:")) {
+            const String &commandBuffer = sBuffer.substring(4);
+            if (commandBuffer.startsWith("HNO:")) {
+                const String &valueBuffer = commandBuffer.substring(4);
+                heatNeededOverride = strtol(valueBuffer.c_str(), nullptr, 10);
+
+                notifyTask(&t_effect_printStatus, true);
+                notifyTask(&t_stateUpdate_angleAndRelay, true);
+                notifyTask(&t_effect_refreshServoAndRelay, true);
+                notifyTask(&t_effect_processSettings, false);
+
+                screenSaverWakeup();
+
+                DEBUG_SER_PRINT_LN(heatNeededOverride);
+            } else if (commandBuffer.startsWith("O:")) {
+                const String &valueBuffer = commandBuffer.substring(2);
+                settingsSelected = MENU_POS_GATE_MANUAL;
+                angle = strtol(valueBuffer.c_str(), nullptr, 10);
+
+                notifyTask(&t_effect_printStatus, true);
+                notifyTask(&t_stateUpdate_angleAndRelay, true);
+                notifyTask(&t_effect_refreshServoAndRelay, true);
+                notifyTask(&t_effect_processSettings, false);
+
+                screenSaverWakeup();
+
+                DEBUG_SER_PRINT_LN(angle);
+            } else if (commandBuffer.startsWith("M:A")) {
+                settingsSelected = -1;
+
+                notifyTask(&t_effect_printStatus, true);
+                notifyTask(&t_stateUpdate_angleAndRelay, true);
+                notifyTask(&t_effect_refreshServoAndRelay, true);
+                notifyTask(&t_effect_processSettings, false);
+
+                screenSaverWakeup();
+            } else {
+                Serial.println("Unknown command: " + sBuffer);
+            }
+        }
+    }
 }
 
 void stateUpdate_hotWaterProbe_cb()
@@ -237,13 +294,19 @@ void stateUpdate_readSensors_cb()
 #endif
 }
 
+#define relay_or_override() config.circuitRelayForced == 0 ? circuitRelay : config.circuitRelayForced == 1
+
 void stateUpdate_angleAndRelay_cb()
 {
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_ENTRY("stateUpdate_angleAndRelay");
 #endif
-    heatNeeded = (heatNeeded && (roomTemp - config.refTempRoom <= (config.debounceLimitC / 2))) ||
-                 (roomTemp - config.refTempRoom <= -(config.debounceLimitC / 2));
+    if (heatNeededOverride == 0) {
+        heatNeeded = (heatNeeded && (roomTemp - config.refTempRoom <= (config.debounceLimitC / 2))) ||
+                     (roomTemp - config.refTempRoom <= -(config.debounceLimitC / 2));
+    } else {
+        heatNeeded = heatNeededOverride != 1;
+    }
 
 //    const float boilerDelta = boilerTemp - float(heatNeeded ? config.refTempBoiler : config.refTempBoilerIdle);
     const float boilerDelta = boilerTemp - config.refTempBoiler;
@@ -295,6 +358,8 @@ void stateUpdate_angleAndRelay_cb()
         Serial.println(angle);
         Serial.print(F("DRQ:HN:"));
         Serial.println(heatNeeded);
+        Serial.print(F("DRQ:R:"));
+        Serial.println(String(relay_or_override()));
     }
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_RET("stateUpdate_angleAndRelay");
@@ -308,7 +373,7 @@ void effect_refreshServoAndRelay_cb()
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_ENTRY("effect_refreshServoAndRelay");
 #endif
-    const bool circuitRelayOrOverride = config.circuitRelayForced == 0 ? circuitRelay : config.circuitRelayForced == 1;
+    const bool circuitRelayOrOverride = relay_or_override();
     if (boilerTemp > 90) {
         // safety mechanism
         servoSetPos(0);
@@ -326,8 +391,6 @@ void effect_refreshServoAndRelay_cb()
         servoSetPos(currAngle);
         sendCurrentStateToRelay(circuitRelayOrOverride);
     }
-    Serial.print(F("DRQ:R:"));
-    Serial.println(String(circuitRelayOrOverride));
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_RET("effect_refreshServoAndRelay");
 #endif
@@ -373,6 +436,8 @@ void effect_processSettings_cb()
     DEBUG_TASK_ENTRY("stateUpdate_readButtons");
 #endif
     eepromUpdate();
+    Serial.print(F("DRQ:R:"));
+    Serial.println(String(relay_or_override()));
 }
 
 void notifyTask(Task *task, bool immediate)
@@ -455,7 +520,7 @@ void servoSetPos(int positionPercent)
     // int time = 1500 + ((positionPercent - 50)*step);
     float multi = float(config.servoMax - config.servoMin) / 100.0f;
     int16_t value = config.servoMin + int16_t(float(positionPercent) * float(multi));
-    DEBUG_SER_PRINT_LN(value);
+//    DEBUG_SER_PRINT_LN(value);
     // the minus is to switch direction, 180 is constant used in method write as a maximum,
     servo.write(180 - value);
 }
@@ -503,10 +568,14 @@ void printStatusOverviewBottom()
     // 2 + 4 + 2 = 8 chars
     snprintf(buffer, MAX_BUFFER_LEN, "H %2d%% ", (int) roomHumidity);
     lcd.print(buffer);
-    lcd.setCursor(6, 1);
     // 2 + 4 + 1 = 7 chars
     snprintf(buffer, MAX_BUFFER_LEN, "R %4.1f\xDF", (double)roomTemp);
     lcd.print(buffer);
+    if (heatNeededOverride != 0) {
+        lcd.print("  \x5E");
+    } else {
+        lcd.print("   ");
+    }
 }
 
 void printStatusOverview()
@@ -547,7 +616,7 @@ bool processSettings()
             settingsSelected = -1;
         }
     }
-    bool anyPressed = stateChanged;
+    bool anyPressed;
     if (settingsSelected >= 0) {
         const ConfigMenuItem_t *currentItem = getMenu(settingsSelected);
         if (readButton(&btn3) == 1) {
@@ -565,19 +634,12 @@ bool processSettings()
             stateChanged = true;
             currentItem->handler(currentItem->param, 1);
         }
-    } else if (!anyPressed) {
-        anyPressed = readButton(&btn3) || readButton(&btn4);
+        anyPressed = stateChanged;
+    } else {
+        anyPressed = stateChanged || readButton(&btn3) || readButton(&btn4);
     }
-    // backlight screensaver
-    static uint16_t noPressCycles = 0;
     if (anyPressed) {
-        if (noPressCycles == 101) {
-#if DEBUG_LEVEL > 1
-            Serial.println("Backlight - off");
-#endif
-            lcd.backlight();
-        }
-        noPressCycles = 0;
+        screenSaverWakeup();
     } else {
         if (noPressCycles >= 100) {
 #if DEBUG_LEVEL > 1
@@ -627,4 +689,15 @@ void eepromUpdate()
 char yesOrNo(int input)
 {
     return input != 0 ? '\xff' : '\xdb';
+}
+
+void screenSaverWakeup()
+{
+    if (noPressCycles == 101) {
+#if DEBUG_LEVEL > 1
+        Serial.println("Backlight - on");
+#endif
+        lcd.backlight();
+    }
+    noPressCycles = 0;
 }
