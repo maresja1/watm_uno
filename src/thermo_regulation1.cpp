@@ -37,7 +37,7 @@ Task t_stateUpdate_readButtons(100, -1, &stateUpdate_readButtons_cb, &runner);
 // one-shot task to compute desired gate angle and relay status - enabled if status changes require recalculation
 Task t_stateUpdate_angleAndRelay(1000, 1, &stateUpdate_angleAndRelay_cb, &runner);
 // periodic task to read sensors - temperatures, might enable other tasks
-Task t_stateUpdate_readSensors(2000, -1, &stateUpdate_readSensors_cb, &runner);
+Task t_stateUpdate_readSensors(5000, -1, &stateUpdate_readSensors_cb, &runner);
 // periodic task for hot water probe - allows relay to let some water through once in a while to allow for better measurement
 Task t_stateUpdate_hotWaterProbe(10000, -1, &stateUpdate_hotWaterProbe_cb, &runner);
 // periodic task to update state based on instructions from the Serial port
@@ -115,7 +115,7 @@ bool hotWaterProbeEnforced = false;
 uint8_t hotWaterProbeCycles = 0;
 
 double Setpoint = 0, Input = 0, Output = 0;
-PID myPID(&Input, &Output, &Setpoint, config.pidKp, config.pidKi, config.pidKd, DIRECT);
+PID myPID(&Input, &Output, &Setpoint, 2.0f, 10.0f, 2.0f, DIRECT);
 
 uint8_t deviceAddress;
 
@@ -160,7 +160,7 @@ void setup()
     dtTempBoiler.setWaitForConversion(false);
     dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
 
-    myPID.SetOutputLimits(0,99);
+    myPID.SetOutputLimits(-50, 49);
     myPID.SetMode(AUTOMATIC);
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
@@ -350,7 +350,7 @@ void stateUpdate_angleAndRelay_cb()
     } else if (settingsSelected == MENU_POS_SERVO_MAX) {
         angle = 99;
     } else {
-        angle = Output;
+        angle = Output + 50;
 
 //        for (int i = config.curveItems - 1; i >= 0; i--) {
 //            if (boilerDelta >= maxDeltaSettings[i]) {
