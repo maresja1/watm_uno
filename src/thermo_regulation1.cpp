@@ -20,7 +20,7 @@
 
 void notifyTask(Task *task, bool immediate);
 
-
+void stateUpdate_simulator_cb();
 void stateUpdate_serialReader_cb();
 void stateUpdate_hotWaterProbe_cb();
 void stateUpdate_readSensors_cb();
@@ -37,7 +37,7 @@ Task t_stateUpdate_readButtons(100, -1, &stateUpdate_readButtons_cb, &runner);
 // one-shot task to compute desired gate angle and relay status - enabled if status changes require recalculation
 Task t_stateUpdate_angleAndRelay(1000, 1, &stateUpdate_angleAndRelay_cb, &runner);
 // periodic task to read sensors - temperatures, might enable other tasks
-Task t_stateUpdate_readSensors(5000, -1, &stateUpdate_readSensors_cb, &runner);
+Task t_stateUpdate_readSensors(2000, -1, &stateUpdate_readSensors_cb, &runner);
 // periodic task for hot water probe - allows relay to let some water through once in a while to allow for better measurement
 Task t_stateUpdate_hotWaterProbe(10000, -1, &stateUpdate_hotWaterProbe_cb, &runner);
 // periodic task to update state based on instructions from the Serial port
@@ -97,8 +97,8 @@ uint8_t angle = 20;
 uint8_t currAngle = 20;
 int16_t settingsSelected = -1;
 int16_t settingsSelectedPrint = -1;
-float boilerTemp = 0.0f;
-float roomTemp = 0.0f;
+float boilerTemp = 44.0f;
+float roomTemp = 21.8f;
 float roomHumidity = 0.0f;
 bool heatNeeded = false;
 uint8_t heatNeededOverride = 0; // 0 no override, 1 - override false, 2 or else - override true
@@ -114,8 +114,11 @@ bool hotWaterProbeHadRelayOn = false;
 bool hotWaterProbeEnforced = false;
 uint8_t hotWaterProbeCycles = 0;
 
+const bool isSimulation = true;
+
 double Setpoint = 0, Input = 0, Output = 0;
-PID myPID(&Input, &Output, &Setpoint, 2.0f, 10.0f, 2.0f, DIRECT);
+// K_u = 1000, T_u = 2s
+PID myPID(&Input, &Output, &Setpoint, 333.0f, 1.0f, 0.666f, DIRECT);
 
 uint8_t deviceAddress;
 
@@ -187,6 +190,63 @@ void setup()
 void loop()
 {
     runner.execute();
+    myPID.Compute();
+}
+
+float simulate_radiatorPower(float deltaTemp)
+{
+//    int16_t radiatorPowerDT30 = 849;
+//    int16_t radiatorPowerDT50 = 1679;
+//    int16_t radiatorSlope = (radiatorPowerDT50 - radiatorPowerDT30) / 20;
+//    int16_t radiatorSlopeBase = radiatorPowerDT30 - (30 * radiatorSlope);
+
+    // polynomial interpolation
+    return max(0.0f, (0.264f * deltaTemp * deltaTemp) + 20.38 * deltaTemp);
+}
+
+const int8_t radiatorCount = 10;
+const float radiatorVolume = 5.8f;
+const int8_t boilerVolume = 36;
+const uint32_t boilerPower = 18000;
+const float efficiency = 0.842;
+const int16_t waterHeatCapacity = 4180;
+const int16_t airKg = 320;
+
+void stateUpdate_simulator_cb()
+{
+    static unsigned long lastSimulate = millis();
+
+    const float deltaTemp = boilerTemp - roomTemp;
+    const float circuitPower = circuitRelay ?
+            float(radiatorCount) * simulate_radiatorPower(deltaTemp * 0.8f) : 0.0f;
+
+    const int16_t circuitVolume = circuitRelay ?
+            int16_t(radiatorCount * radiatorVolume) : 0.0f;
+
+    const float time = float(millis() - lastSimulate) / 1000.0f; // should be 1000 or 100 for 10x speed up
+
+    // -2000 W lost due to insulation
+    const float insulationLost = max(0, 12000.0f * ((roomTemp - 15) / 20)) ;
+    const float boilerAsRadiator = simulate_radiatorPower(deltaTemp);
+    const float roomHeat = circuitPower + boilerAsRadiator - insulationLost;
+    DEBUG_SER_PRINT(roomHeat);
+    DEBUG_SER_PRINT_LN(circuitPower);
+
+    roomTemp = roomTemp + float(double(roomHeat * time) / (double(airKg) * 1000));
+
+    const float drag = circuitPower + boilerAsRadiator;
+    const float boilerPowerAngle = (boilerPower * angle) / 100;
+    DEBUG_SER_PRINT(boilerPowerAngle);
+    DEBUG_SER_PRINT_LN(drag);
+
+    const float newBoilerTemp = boilerTemp +
+        (
+                ((boilerPowerAngle - drag) * time * efficiency) /
+                (float(boilerVolume + circuitVolume) * float(waterHeatCapacity))
+        );
+    boilerTemp = newBoilerTemp;
+
+    lastSimulate = millis();
 }
 
 void stateUpdate_serialReader_cb()
@@ -268,24 +328,28 @@ void stateUpdate_readSensors_cb()
     const float lastBoilerTemp = boilerTemp;
     const float lastRoomTemp = roomTemp;
 
+    if (!isSimulation) {
 #if USE_DHT_ROOM_TEMP
-    float lastReading = digitalThermometer.readTemperature(false, false) + config.roomTempAdjust;
-    if (roomTemp > 0.0f) {
-        roomTemp = (lastReading + (4 * roomTemp)) / 5; // running average
-    } else {
-        roomTemp = lastReading;
-    }
-    roomHumidity = digitalThermometer.readHumidity(false);
+        float lastReading = digitalThermometer.readTemperature(false, false) + config.roomTempAdjust;
+        if (roomTemp > 0.0f) {
+            roomTemp = (lastReading + (4 * roomTemp)) / 5; // running average
+        } else {
+            roomTemp = lastReading;
+        }
+        roomHumidity = digitalThermometer.readHumidity(false);
 #else
-    roomTemp = readTemp(ROOM_THERM_PIN);
+        roomTemp = readTemp(ROOM_THERM_PIN);
 #endif
 
 #if USE_DT_ROOM_BOILER
-    boilerTemp = dtTempBoiler.getTempC(&deviceAddress);
-    dtTempBoiler.requestTemperaturesByAddress(&deviceAddress); // make ready for next call
+        boilerTemp = dtTempBoiler.getTempC(&deviceAddress);
+        dtTempBoiler.requestTemperaturesByAddress(&deviceAddress); // make ready for next call
 #else
-    boilerTemp = readTemp(BOILER_THERM_PIN);
+        boilerTemp = readTemp(BOILER_THERM_PIN);
 #endif
+    } else {
+        stateUpdate_simulator_cb();
+    }
 
     // roomTemp is not NaN
     if (roomTemp == roomTemp) {
@@ -293,7 +357,6 @@ void stateUpdate_readSensors_cb()
     }
 
     Input = boilerTemp;
-    myPID.Compute();
 
     if((boilerTemp != lastBoilerTemp) || (roomTemp != lastRoomTemp)) {
         notifyTask(&t_stateUpdate_angleAndRelay, false);
@@ -668,7 +731,7 @@ bool processSettings()
 #if DEBUG_LEVEL > 1
             Serial.println("Backlight - on");
 #endif
-            lcd.noBacklight();
+//            lcd.noBacklight();
             noPressCycles = 101;
         } else {
             noPressCycles++;
