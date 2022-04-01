@@ -1,309 +1,144 @@
-void *menuHandlerGate(__attribute__((unused)) void *param, int8_t diff)
-{
-    angle += (diff * 5);
-    if (angle < 0 || angle > 200 /* overflow */) {
-        angle = 0;
-    }
-    if (angle >= 100) {
-        angle = 99;
-    }
-    if (diff != 0 && angle != 99 && angle % 5 != 0) {
-        angle = (angle / 5) * 5;
-    }
-    currAngle = angle;
-    return &angle;
-}
+#include "menu_handlers.h"
+#include "menu_formatters.h"
 
-void *menuHandlerBoiler(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.refTempBoiler += diff;
-    return &config.refTempBoiler;
-}
+const char menuManual[] PROGMEM = "Manual %";
+const char menuBoilerTemp[] PROGMEM = "Boiler \xDF";
+const char menuRoomTemp[] PROGMEM = "Room \xDF";
+const char menuCircuitRelay[] PROGMEM = "Circuit Relay";
+const char menuRoomTempAdj[] PROGMEM = "[E] Room Temp adj.";
+const char menuServoMin[] PROGMEM = "[E] Servo Min";
+const char menuServoMax[] PROGMEM = "[E] Servo Max";
+const char menuBoilerIdle[] PROGMEM = "[E] Boiler Idle";
+const char menuDebounce[] PROGMEM = "[E] T. Debounce";
+const char menuOverheating[] PROGMEM = "[E] Overheating\xDF";
+const char menuDeltaTp1[] PROGMEM = "[E] deltaT p1";
+const char menuDeltaTp0[] PROGMEM = "[E] deltaT p0";
+const char menuPIDp[] PROGMEM = "[E] PID K_p";
+const char menuPIDi[] PROGMEM = "[E] PID K_i";
+const char menuPIDd[] PROGMEM = "[E] PID K_d";
+const char menuRelayPIDp[] PROGMEM = "[E] Relay PID K_p";
+const char menuRelayPIDi[] PROGMEM = "[E] Relay PID K_i";
+const char menuRelayPIDd[] PROGMEM = "[E] Relay PID K_d";
 
-void *menuHandlerBoilerIdle(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.refTempBoilerIdle += diff;
-    return &config.refTempBoilerIdle;
-}
-
-void *menuHandlerRoom(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.refTempRoom += float(diff) * 0.2f;
-    return &config.refTempRoom;
-}
-
-void *menuHandlerRoomTempAdjust(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.roomTempAdjust += float(diff) * 0.1f;
-    return &config.roomTempAdjust;
-}
-
-void *menuHandlerDebounceLimitC(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.debounceLimitC += float(diff) * 0.1f;
-    if (config.debounceLimitC <= -10) {
-        config.debounceLimitC = 9.9;
-    }
-    if (config.debounceLimitC >= 10) {
-        config.debounceLimitC = -9.9;
-    }
-    return &config.debounceLimitC;
-}
-
-void *menuHandlerCurveItems(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.curveItems += diff;
-    config.curveItems %= MAX_DELTA_SETTINGS;
-    if (config.curveItems < 0) {
-        config.curveItems = 0;
-    }
-    return &config.curveItems;
-}
-
-void *menuHandlerCurveItemX(void *param, int8_t diff)
-{
-    uintptr_t index = (uintptr_t) param;
-#if DEBUG_LEVEL > 2
-    Serial.print("menuHandlerCurveItemX - index: ");
-    Serial.print(index);
-    Serial.print(", value: ");
-    Serial.print(maxDeltaSettings[index]);
-    Serial.print(", diff: ");
-    Serial.print(diff);
-    Serial.println("");
-#endif
-    maxDeltaSettings[index] += diff;
-    return &maxDeltaSettings[index];
-}
-
-void *menuHandlerCurveItemY(void *param, int8_t diff)
-{
-    uintptr_t index = (uintptr_t) param;
-#if DEBUG_LEVEL > 2
-    Serial.print("menuHandlerCurveItemY - index: ");
-    Serial.print(index);
-    Serial.print(", value: ");
-    Serial.print(maxDeltaHigh[index]);
-    Serial.print(", diff: ");
-    Serial.print(diff);
-    Serial.println("");
-#endif
-    maxDeltaHigh[index] += diff;
-    return &maxDeltaHigh[index];
-}
-
-void *menuHandlerCircuitRelayForced(__attribute__((unused)) void *param, int8_t diff)
-{
-    if (diff != 0) {
-        config.circuitRelayForced = (config.circuitRelayForced + 1) % 3;
-    }
-    return &config.circuitRelayForced;
-}
-
-void *menuHandlerServoMin(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.servoMin += int16_t(diff);
-    return &config.servoMin;
-}
-
-void *menuHandlerServoMax(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.servoMax += int16_t(diff);
-    return &config.servoMax;
-}
-
-void *menuHandlerOverheatingLimit(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.overheatingLimit += diff;
-    return &config.overheatingLimit;
-}
-
-void *menuHandlerUnderheatingLimit(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.underheatingLimit += diff;
-    return &config.underheatingLimit;
-}
-
-void *menuHandlerDeltaTempPoly0(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.deltaTempPoly0 += float(diff) * 0.1f;
-    return &config.deltaTempPoly0;
-}
-
-void *menuHandlerDeltaTempPoly0S(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.deltaTempPoly0 += float(diff) * 0.002f;
-    return &config.deltaTempPoly0;
-}
-
-void *menuHandlerDeltaTempPoly1(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.deltaTempPoly1 += float(diff) * 0.1f;
-    return &config.deltaTempPoly1;
-}
-
-void *menuHandlerDeltaTempPoly1S(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.deltaTempPoly1 += float(diff) * 0.002f;
-    return &config.deltaTempPoly1;
-}
-
-
-void menuFormatterUInt8Value(__attribute__((unused)) void *param, char *pBuffer, int16_t maxLen, void *value)
-{
-    lcd.cursor();
-    snprintf(pBuffer, maxLen, "value: %8d", *(uint8_t *) value);
-}
-
-void menuFormatterInt16Value(__attribute__((unused)) void *param, char *pBuffer, int16_t maxLen, void *value)
-{
-    lcd.cursor();
-    snprintf(pBuffer, maxLen, "value: %8d", *(int16_t *) value);
-}
-
-void menuFormatterInt8Value(__attribute__((unused)) void *param, char *pBuffer, int16_t maxLen, void *value)
-{
-    lcd.cursor();
-    snprintf(pBuffer, maxLen, "value: %8d", *(int8_t *) value);
-}
-
-void menuFormatterFloatValue(__attribute__((unused)) void *param, char *pBuffer, int16_t maxLen, void *value)
-{
-    lcd.cursor();
-    snprintf(pBuffer, maxLen, "value: %7.3f", (double)*(float*)value);
-}
-
-void menuFormatterCircuitOverride(__attribute__((unused)) void *param, char *pBuffer, int16_t maxLen, void *value)
-{
-    switch (*(int8_t *) value) {
-        case 0:
-            snprintf(pBuffer, maxLen, ("no override"));
-            break;
-        case 1:
-            snprintf(pBuffer, maxLen, ("always enabled"));
-            break;
-        case 2:
-            snprintf(pBuffer, maxLen, ("always disabled"));
-            break;
-    }
-}
-
-#define MENU_STATIC_ITEMS 11
+#define MENU_STATIC_ITEMS 19
 const ConfigMenuItem_t menu[] = {
         {
-                .name = "Manual %",
+                .name = menuManual,
                 .param = nullptr,
                 .handler = &menuHandlerGate,
                 .formatter = &menuFormatterUInt8Value
         },
         {
-                .name = "Boiler \xDF",
+                .name = menuBoilerTemp,
                 .param = nullptr,
                 .handler = &menuHandlerBoiler,
                 .formatter = &menuFormatterUInt8Value
         },
         {
-                .name = "Room \xDF",
+                .name = menuRoomTemp,
                 .param = nullptr,
                 .handler = &menuHandlerRoom,
                 .formatter = &menuFormatterFloatValue
         },
         {
-                .name = "Circuit Relay",
+                .name = menuCircuitRelay,
                 .param = nullptr,
                 .handler = &menuHandlerCircuitRelayForced,
                 .formatter = &menuFormatterCircuitOverride
         },
         {
-                .name = "[E] Room Temp adj.",
+                .name = menuRoomTempAdj,
                 .param = nullptr,
                 .handler = &menuHandlerRoomTempAdjust,
                 .formatter = &menuFormatterFloatValue
         },
         {
-                .name = "[E] Servo Min",
+                .name = menuServoMin,
                 .param = nullptr,
                 .handler = &menuHandlerServoMin,
                 .formatter = &menuFormatterInt16Value
         },
         {
-                .name = "[E] Servo Max",
+                .name = menuServoMax,
                 .param = nullptr,
                 .handler = &menuHandlerServoMax,
                 .formatter = &menuFormatterInt16Value
         },
         {
-                .name = "[E] Boiler Idle",
+                .name = menuBoilerIdle,
                 .param = nullptr,
                 .handler = &menuHandlerBoilerIdle,
                 .formatter = &menuFormatterUInt8Value
         },
         {
-                .name = "[E] T. Debounce",
+                .name = menuDebounce,
                 .param = nullptr,
                 .handler = &menuHandlerDebounceLimitC,
                 .formatter = &menuFormatterFloatValue
         },
         {
-                .name = "[E] Overheating\xDF",
+                .name = menuOverheating,
                 .param = nullptr,
                 .handler = &menuHandlerOverheatingLimit,
                 .formatter = &menuFormatterUInt8Value
         },
-//        {
-//                .name = "[E] Underheating\xDF",
-//                .param = nullptr,
-//                .handler = &menuHandlerUnderheatingLimit,
-//                .formatter = &menuFormatterUInt8Value
-//        },
-//        {
-//                .name = "[E] deltaT p1",
-//                .param = nullptr,
-//                .handler = &menuHandlerDeltaTempPoly1,
-//                .formatter = &menuFormatterFloatValue
-//        },
-//        {
-//                .name = "[E] deltaT p1 S",
-//                .param = nullptr,
-//                .handler = &menuHandlerDeltaTempPoly1S,
-//                .formatter = &menuFormatterFloatValue
-//        },
-//        {
-//                .name = "[E] deltaT p0",
-//                .param = nullptr,
-//                .handler = &menuHandlerDeltaTempPoly0,
-//                .formatter = &menuFormatterFloatValue
-//        },
-//        {
-//                .name = "[E] deltaT p0 S",
-//                .param = nullptr,
-//                .handler = &menuHandlerDeltaTempPoly0S,
-//                .formatter = &menuFormatterFloatValue
-//        },
         {
-                .name = "[E] Curve Items",
+                .name = menuDeltaTp1,
                 .param = nullptr,
-                .handler = &menuHandlerCurveItems,
-                .formatter = &menuFormatterUInt8Value
+                .handler = &menuHandlerDeltaTempPoly1,
+                .formatter = &menuFormatterFloatValue
+        },
+        {
+                .name = menuDeltaTp0,
+                .param = nullptr,
+                .handler = &menuHandlerDeltaTempPoly0,
+                .formatter = &menuFormatterFloatValue
+        },
+        {
+                .name = menuPIDp,
+                .param = nullptr,
+                .handler = &menuHandlerPID_p,
+                .formatter = &menuFormatterFloatValue
+        },
+        {
+                .name = menuPIDi,
+                .param = nullptr,
+                .handler = &menuHandlerPID_i,
+                .formatter = &menuFormatterFloatValue
+        },
+        {
+                .name = menuPIDd,
+                .param = nullptr,
+                .handler = &menuHandlerPID_d,
+                .formatter = &menuFormatterFloatValue
+        },
+        {
+                .name = menuRelayPIDp,
+                .param = nullptr,
+                .handler = &menuHandlerRelayPID_p,
+                .formatter = &menuFormatterFloatValue
+        },
+        {
+                .name = menuRelayPIDi,
+                .param = nullptr,
+                .handler = &menuHandlerRelayPID_i,
+                .formatter = &menuFormatterFloatValue
+        },
+        {
+                .name = menuRelayPIDd,
+                .param = nullptr,
+                .handler = &menuHandlerRelayPID_d,
+                .formatter = &menuFormatterFloatValue
         }
 };
 
-char bufferMenuName[20];
-struct ConfigMenuItem bufferMenuItem;
-
 const struct ConfigMenuItem *getMenu(int16_t itemIndex)
 {
-    if (itemIndex < MENU_STATIC_ITEMS) {
-        return &menu[itemIndex];
-    } else {
-        uint16_t index = itemIndex - MENU_STATIC_ITEMS;
-        bool isY = (index % 2) == 1;
-        uintptr_t i = index / 2;
-        snprintf(bufferMenuName, 20, ("[E] Curve[%d].%s"), i, isY ? "%" : "d\xDF");
-        bufferMenuItem.name = bufferMenuName;
-        bufferMenuItem.handler = isY ? &menuHandlerCurveItemY : &menuHandlerCurveItemX;
-        bufferMenuItem.formatter = isY ? &menuFormatterUInt8Value : &menuFormatterInt8Value;
-        bufferMenuItem.param = (void *) i;
-        return &bufferMenuItem;
-    }
+    const ConfigMenuItem_t *pItem = &menu[itemIndex];
+    bufferMenuItem.param = pItem->param;
+    bufferMenuItem.formatter = pItem->formatter;
+    bufferMenuItem.handler = pItem->handler;
+    strncpy_P(buffer, pItem->name, MAX_BUFFER_LEN);
+    bufferMenuItem.name = buffer;
+    return &bufferMenuItem;
 }

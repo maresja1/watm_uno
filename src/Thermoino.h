@@ -1,3 +1,11 @@
+#pragma once
+//
+// Created by jan on 4/1/22.
+//
+
+#ifndef THERMOINO_H
+#define THERMOINO_H
+
 #define DEBUG_LEVEL 1
 #define DT_BOILER_PIN 11
 #define SERVO_PIN 10
@@ -21,18 +29,23 @@
 #define DEBUG_TASK_RET(x)
 #endif
 
-#define DEBUG_SER_PRINT(x) do { Serial.print(#x": "); Serial.print(x); Serial.print(", "); } while(0)
-#define DEBUG_SER_PRINT_LN(x) do { Serial.print(#x": "); Serial.print(x); Serial.println(""); } while(0)
+#define PRINT_SERIAL_UPDATES 0
+
+#define DEBUG_SER_PRINT(x) do { Serial.print(F(#x": ")); Serial.print(x); Serial.print(F(", ")); } while(0)
+#define DEBUG_SER_PRINT_LN(x) do { Serial.print(F(#x": ")); Serial.print(x); Serial.println(""); } while(0)
 
 #define MENU_POS_GATE_MANUAL 0
 #define MENU_POS_SERVO_MIN 5
 #define MENU_POS_SERVO_MAX 6
 
+#define MAX_BUFFER_LEN 20
+extern char buffer[];
+
 typedef struct ConfigMenuItem {
     const char *name;
     void* param;
     void* (*handler)(void* param, int8_t diff);
-    void (*formatter)(void* param, char *buffer, int16_t maxLen, void *value);
+    void (*formatter)(void* param, Print &print, void *value);
 } ConfigMenuItem_t;
 
 struct Configuration {
@@ -42,7 +55,6 @@ struct Configuration {
     uint8_t circuitRelayForced;
     int16_t servoMin;
     int16_t servoMax;
-    uint8_t curveItems;
     float debounceLimitC;
     uint8_t underheatingLimit;
     uint8_t overheatingLimit;
@@ -54,6 +66,9 @@ struct Configuration {
     float pidKp;
     float pidKi;
     float pidKd;
+    float pidRelayKp;
+    float pidRelayKi;
+    float pidRelayKd;
 };
 
 typedef struct Button {
@@ -71,3 +86,5 @@ void servoSetPos(int positionPercent);
 void notifyChangeState(bool immediate);
 void sendCurrentStateToRelay(bool state);
 void screenSaverWakeup();
+
+#endif //THERMOINO_H

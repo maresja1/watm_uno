@@ -1,0 +1,175 @@
+#include "Thermoino.h"
+
+void *menuHandlerGate(__attribute__((unused)) void *param, int8_t diff)
+{
+    angle += (diff * 5);
+    if (angle < 0 || angle > 200 /* overflow */) {
+        angle = 0;
+    }
+    if (angle >= 100) {
+        angle = 99;
+    }
+    if (diff != 0 && angle != 99 && angle % 5 != 0) {
+        angle = (angle / 5) * 5;
+    }
+    currAngle = angle;
+    return &angle;
+}
+
+void *menuHandlerBoiler(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.refTempBoiler += diff;
+    return &config.refTempBoiler;
+}
+
+void *menuHandlerBoilerIdle(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.refTempBoilerIdle += diff;
+    return &config.refTempBoilerIdle;
+}
+
+void *menuHandlerRoom(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.refTempRoom += float(diff) * 0.2f;
+    return &config.refTempRoom;
+}
+
+void *menuHandlerRoomTempAdjust(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.roomTempAdjust += float(diff) * 0.1f;
+    return &config.roomTempAdjust;
+}
+
+void *menuHandlerDebounceLimitC(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.debounceLimitC += float(diff) * 0.1f;
+    if (config.debounceLimitC <= -10) {
+        config.debounceLimitC = 9.9;
+    }
+    if (config.debounceLimitC >= 10) {
+        config.debounceLimitC = -9.9;
+    }
+    return &config.debounceLimitC;
+}
+
+//void *menuHandlerCurveItems(__attribute__((unused)) void *param, int8_t diff)
+//{
+//    config.curveItems += diff;
+//    config.curveItems %= MAX_DELTA_SETTINGS;
+//    if (config.curveItems < 0) {
+//        config.curveItems = 0;
+//    }
+//    return &config.curveItems;
+//}
+
+//void *menuHandlerCurveItemX(void *param, int8_t diff)
+//{
+//    uintptr_t index = (uintptr_t) param;
+//#if DEBUG_LEVEL > 2
+//    Serial.print("menuHandlerCurveItemX - index: ");
+//    Serial.print(index);
+//    Serial.print(", value: ");
+//    Serial.print(maxDeltaSettings[index]);
+//    Serial.print(", diff: ");
+//    Serial.print(diff);
+//    Serial.println("");
+//#endif
+//    maxDeltaSettings[index] += diff;
+//    return &maxDeltaSettings[index];
+//}
+//
+//void *menuHandlerCurveItemY(void *param, int8_t diff)
+//{
+//    uintptr_t index = (uintptr_t) param;
+//#if DEBUG_LEVEL > 2
+//    Serial.print("menuHandlerCurveItemY - index: ");
+//    Serial.print(index);
+//    Serial.print(", value: ");
+//    Serial.print(maxDeltaHigh[index]);
+//    Serial.print(", diff: ");
+//    Serial.print(diff);
+//    Serial.println("");
+//#endif
+//    maxDeltaHigh[index] += diff;
+//    return &maxDeltaHigh[index];
+//}
+
+void *menuHandlerCircuitRelayForced(__attribute__((unused)) void *param, int8_t diff)
+{
+    if (diff != 0) {
+        config.circuitRelayForced = (config.circuitRelayForced + 1) % 3;
+    }
+    return &config.circuitRelayForced;
+}
+
+void *menuHandlerServoMin(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.servoMin += int16_t(diff);
+    return &config.servoMin;
+}
+
+void *menuHandlerServoMax(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.servoMax += int16_t(diff);
+    return &config.servoMax;
+}
+
+void *menuHandlerOverheatingLimit(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.overheatingLimit += diff;
+    return &config.overheatingLimit;
+}
+
+void *menuHandlerUnderheatingLimit(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.underheatingLimit += diff;
+    return &config.underheatingLimit;
+}
+
+void *menuHandlerDeltaTempPoly0(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.deltaTempPoly0 += float(diff) * 0.005f;
+    return &config.deltaTempPoly0;
+}
+
+void *menuHandlerDeltaTempPoly1(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.deltaTempPoly1 += float(diff) * 0.005f;
+    return &config.deltaTempPoly1;
+}
+
+void *menuHandlerPID_p(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.pidKp += float(diff) * 0.5f;
+    return &config.pidKp;
+}
+
+void *menuHandlerPID_i(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.pidKi += float(diff) * 0.05f;
+    return &config.pidKi;
+}
+
+void *menuHandlerPID_d(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.pidKd += float(diff) * 0.05f;
+    return &config.pidKd;
+}
+
+void *menuHandlerRelayPID_p(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.pidRelayKp += float(diff) * 0.5f;
+    return &config.pidRelayKp;
+}
+
+void *menuHandlerRelayPID_i(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.pidRelayKi += float(diff) * 0.05f;
+    return &config.pidRelayKi;
+}
+
+void *menuHandlerRelayPID_d(__attribute__((unused)) void *param, int8_t diff)
+{
+    config.pidRelayKd += float(diff) * 0.05f;
+    return &config.pidRelayKd;
+}
