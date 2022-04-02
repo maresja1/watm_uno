@@ -13,12 +13,12 @@ const char menuDebounce[] PROGMEM = "[E] T. Debounce";
 const char menuOverheating[] PROGMEM = "[E] Overheating\xDF";
 const char menuDeltaTp1[] PROGMEM = "[E] deltaT p1";
 const char menuDeltaTp0[] PROGMEM = "[E] deltaT p0";
-const char menuPIDp[] PROGMEM = "[E] PID K_p";
-const char menuPIDi[] PROGMEM = "[E] PID K_i";
-const char menuPIDd[] PROGMEM = "[E] PID K_d";
-const char menuRelayPIDp[] PROGMEM = "[E] Relay PID K_p";
-const char menuRelayPIDi[] PROGMEM = "[E] Relay PID K_i";
-const char menuRelayPIDd[] PROGMEM = "[E] Relay PID K_d";
+const char menuPIDp[] PROGMEM = "[E] BoilPID K_p";
+const char menuPIDi[] PROGMEM = "[E] BoilPID K_i";
+const char menuPIDd[] PROGMEM = "[E] BoilPID K_d";
+const char menuRelayPIDp[] PROGMEM = "[E] RelPID K_p";
+const char menuRelayPIDi[] PROGMEM = "[E] RelPID K_i";
+const char menuRelayPIDd[] PROGMEM = "[E] RelPID K_d";
 
 #define MENU_STATIC_ITEMS 19
 const ConfigMenuItem_t menu[] = {

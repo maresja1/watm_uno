@@ -138,38 +138,41 @@ void *menuHandlerDeltaTempPoly1(__attribute__((unused)) void *param, int8_t diff
     return &config.deltaTempPoly1;
 }
 
+void *handlePIDValueConfig(float *floatVal, int8_t diff)
+{
+    *floatVal += float(diff) * (*floatVal > 5 ? 0.5f : (*floatVal > 0.5f ? 0.05f : 0.001f));
+    if (*floatVal < 0.0f) {
+        *floatVal = 0.0f;
+    }
+    return floatVal;
+}
+
 void *menuHandlerPID_p(__attribute__((unused)) void *param, int8_t diff)
 {
-    config.pidKp += float(diff) * 0.5f;
-    return &config.pidKp;
+    return handlePIDValueConfig(&config.pidKp, diff);
 }
 
 void *menuHandlerPID_i(__attribute__((unused)) void *param, int8_t diff)
 {
-    config.pidKi += float(diff) * 0.05f;
-    return &config.pidKi;
+    return handlePIDValueConfig(&config.pidKi, diff);
 }
 
 void *menuHandlerPID_d(__attribute__((unused)) void *param, int8_t diff)
 {
-    config.pidKd += float(diff) * 0.05f;
-    return &config.pidKd;
+    return handlePIDValueConfig(&config.pidKd, diff);
 }
 
 void *menuHandlerRelayPID_p(__attribute__((unused)) void *param, int8_t diff)
 {
-    config.pidRelayKp += float(diff) * 0.5f;
-    return &config.pidRelayKp;
+    return handlePIDValueConfig(&config.pidRelayKp, diff);
 }
 
 void *menuHandlerRelayPID_i(__attribute__((unused)) void *param, int8_t diff)
 {
-    config.pidRelayKi += float(diff) * 0.05f;
-    return &config.pidRelayKi;
+    return handlePIDValueConfig(&config.pidRelayKi, diff);
 }
 
 void *menuHandlerRelayPID_d(__attribute__((unused)) void *param, int8_t diff)
 {
-    config.pidRelayKd += float(diff) * 0.05f;
-    return &config.pidRelayKd;
+    return handlePIDValueConfig(&config.pidRelayKd, diff);
 }

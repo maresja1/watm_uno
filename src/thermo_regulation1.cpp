@@ -32,26 +32,28 @@ void stateUpdate_angleAndRelay_cb();
 void stateUpdate_readButtons_cb();
 void effect_processSettings_cb();
 
+const float simulationSpeed = 10.0f;
+
 Scheduler runner;
 //Tasks
 // periodic task to read state of buttons - might enable other tasks, if needed
-Task t_stateUpdate_readButtons(100, -1, &stateUpdate_readButtons_cb, &runner);
+Task t_stateUpdate_readButtons(1e2, -1, &stateUpdate_readButtons_cb, &runner);
 // one-shot task to compute desired gate angle and relay status - enabled if status changes require recalculation
-Task t_stateUpdate_angleAndRelay(1000, 1, &stateUpdate_angleAndRelay_cb, &runner);
+Task t_stateUpdate_angleAndRelay(uint64_t(1e3 / simulationSpeed), 1, &stateUpdate_angleAndRelay_cb, &runner);
 // periodic task to read sensors - temperatures, might enable other tasks
-Task t_stateUpdate_readSensors(2000, -1, &stateUpdate_readSensors_cb, &runner);
+Task t_stateUpdate_readSensors(uint64_t(2e3 / simulationSpeed), -1, &stateUpdate_readSensors_cb, &runner);
 // periodic task for hot water probe - allows relay to let some water through once in a while to allow for better measurement
-Task t_stateUpdate_hotWaterProbe(10000, -1, &stateUpdate_hotWaterProbe_cb, &runner);
+Task t_stateUpdate_hotWaterProbe(uint64_t(1e4 / simulationSpeed), -1, &stateUpdate_hotWaterProbe_cb, &runner);
 // periodic task for PID heat control
-Task t_stateUpdate_heatNeeded(1000, -1, &stateUpdate_heatNeeded_cb, &runner);
+Task t_stateUpdate_heatNeeded(uint64_t(1e4 / simulationSpeed), -1, &stateUpdate_heatNeeded_cb, &runner);
 // periodic task to update state based on instructions from the Serial port
-Task t_stateUpdate_serialReader(1000, -1, &stateUpdate_serialReader_cb, &runner);
+Task t_stateUpdate_serialReader(uint64_t(1e3 / simulationSpeed), -1, &stateUpdate_serialReader_cb, &runner);
 // one-shot effect task to update desired settings of the gate angle and circuit relay - triggered by other tasks
-Task t_effect_refreshServoAndRelay(6000, 1, &effect_refreshServoAndRelay_cb, &runner);
+Task t_effect_refreshServoAndRelay(uint64_t(6e3 / simulationSpeed), 1, &effect_refreshServoAndRelay_cb, &runner);
 // one-shot effect task to print current status to LCD - triggered by other tasks when smth. changes
-Task t_effect_printStatus(1000, 1, &effect_printStatus_cb, &runner);
+Task t_effect_printStatus(1e3, 1, &effect_printStatus_cb, &runner);
 // one-shot effect task to save current settings to EEPROM - should always be planned with a delay to avoid too many overwrites
-Task t_effect_processSettings(2000, 1, &effect_processSettings_cb, &runner);
+Task t_effect_processSettings(2e3, 1, &effect_processSettings_cb, &runner);
 
 // initialize the library with the numbers of the interface pins
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
@@ -84,12 +86,13 @@ Configuration config = {
     .deltaTempPoly0 = 0.0f, //1.612f,
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
-    .pidKp = 60.0f,
-    .pidKi = 1.35f,
-    .pidKd = 1.0f,
-    .pidRelayKp = 12.0f,
-    .pidRelayKi = 0.0f,
-    .pidRelayKd = 0.0f,
+    .pidKp = 10.0f,
+    .pidKi = 0.7f,
+    .pidKd = 0.05f,
+    // K_u = 0.5 (maybe less), T_u = 800s
+    .pidRelayKp = 1.8f,
+    .pidRelayKi = 0.05f,
+    .pidRelayKd = 0.00f,
 };
 
 char buffer[MAX_BUFFER_LEN];
@@ -99,7 +102,7 @@ uint8_t currAngle = 50;
 int16_t settingsSelected = -1;
 int16_t settingsSelectedPrint = -1;
 float boilerTemp = 50.0f;
-float roomTemp = 21.1f;
+float roomTemp = 21.8f;
 float roomHumidity = 0.0f;
 bool heatNeeded = false;
 uint8_t heatNeededOverride = 0; // 0 no override, 1 - override false, 2 or else - override true
@@ -124,7 +127,7 @@ QuickPID pidBoiler(&pidBoilerIn, &pidBoilerOut, &pidBoilerSet);
 sTune tuner(&pidBoilerIn, &pidBoilerOut, tuner.ZN_PID, tuner.directIP, tuner.printALL);
 
 float pidRelaySet = 0, pidRelayIn = 0, pidRelayOut = 0;
-const uint16_t relayWindowFragments = 60;
+const uint8_t relayWindowFragments = 100;
 // K_u = 0.5f, T_u = 280s
 //PID pidRelay(&pidRelayIn, &pidRelayOut, &pidRelaySet, 0.5f, 0.0f, 0.0f, DIRECT);
 QuickPID pidRelay(&pidRelayIn, &pidRelayOut, &pidRelaySet);
@@ -172,7 +175,7 @@ void setup()
     dtTempBoiler.setWaitForConversion(false);
     dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
 
-    pidBoiler.SetOutputLimits(-50.0f, 49.0f);
+    pidBoiler.SetOutputLimits(0.0f, 99.0f);
     pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
     pidBoiler.SetMode(QuickPID::Control::timer);
 
@@ -183,7 +186,7 @@ void setup()
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
 
-    Serial.println(F("Thermoino 1, built:" __DATE__ " " __TIME__ " (" __FILE__ ") - Setup finished."));
+//    Serial.println(F("Thermoino 1, built:" __DATE__ " " __TIME__ " (" __FILE__ ") - Setup finished."));
 
     t_stateUpdate_readButtons.enable();
     t_stateUpdate_readSensors.enable();
@@ -198,7 +201,7 @@ void setup()
     notifyTask(&t_stateUpdate_angleAndRelay, false);
 
     lcd.print(F("ok"));
-    Serial.println(F("Setup finished..."));
+//    Serial.println(F("Setup finished..."));
 
     effect_processSettings_cb();
 }
@@ -206,34 +209,6 @@ void setup()
 void loop()
 {
     runner.execute();
-}
-
-uint16_t heatNeededCurrentFragment = 60;
-void stateUpdate_heatNeeded_cb()
-{
-    const bool lastHeatNeeded = heatNeeded;
-    heatNeededCurrentFragment++;
-    if (heatNeededCurrentFragment >= relayWindowFragments) {
-        heatNeededCurrentFragment = 0;
-    }
-    if (heatNeededOverride == 0) {
-        heatNeeded = lround(pidRelayOut) > heatNeededCurrentFragment;
-        DEBUG_SER_PRINT(millis());
-        DEBUG_SER_PRINT(heatNeeded);
-        DEBUG_SER_PRINT(roomTemp);
-        DEBUG_SER_PRINT_LN(pidRelayOut);
-//        heatNeeded = (heatNeeded && (roomTemp - config.refTempRoom <= (config.debounceLimitC / 2))) ||
-//                     (roomTemp - config.refTempRoom <= -(config.debounceLimitC / 2));
-    } else {
-        heatNeeded = heatNeededOverride != 1;
-    }
-    if (lastHeatNeeded != heatNeeded) {
-        notifyTask(&t_stateUpdate_angleAndRelay, false);
-#if PRINT_SERIAL_UPDATES
-        Serial.print(F("DRQ:HN:"));
-        Serial.println(heatNeeded);
-#endif
-    }
 }
 
 float simulate_radiatorPower(float deltaTemp)
@@ -251,10 +226,10 @@ const int8_t radiatorCount = 10;
 const float radiatorVolume = 5.8f;
 const int8_t boilerVolume = 36;
 const uint32_t boilerPower = 18000;
-const float efficiency = 0.80;
 const int16_t waterHeatCapacity = 4180;
 const int16_t airKg = 320;
-float circuitTemp = 33;
+float circuitTemp = 40;
+const int16_t circuitVolume = int16_t(radiatorCount * radiatorVolume);
 
 unsigned long lastSimulate = UINT64_MAX;
 void stateUpdate_simulator_cb()
@@ -262,42 +237,58 @@ void stateUpdate_simulator_cb()
     if (lastSimulate > millis()) {
         lastSimulate = millis();
     }
+    const float dTime = float(millis() - lastSimulate) * simulationSpeed / 1000.0f; // should be 1000 or 100 for 10x speed up
 
     const float circuitPower = float(radiatorCount) * simulate_radiatorPower(circuitTemp - roomTemp);
 
-    const int16_t circuitVolume = int16_t(radiatorCount * radiatorVolume);
-
-    const float time = float(millis() - lastSimulate) / 1000.0f; // should be 1000 or 100 for 10x speed up
-
-    // -2000 W lost due to insulation
-    const float insulationLost = max(0, 12000.0f * ((roomTemp - 10) / 20)) ;
+    // max 8 kW (temp difference 20 C) lost due to insulation
+    const float insulationLost = max(0, 8000.0f * ((roomTemp - 10) / 20)) ;
     const float boilerAsRadiator = simulate_radiatorPower(boilerTemp - roomTemp) * 2;
     const float roomHeat = circuitPower + boilerAsRadiator - insulationLost;
 
     const float boilerPowerAngle = float(boilerPower * currAngle) / 100;
 
     boilerTemp += (
-        ((boilerPowerAngle - boilerAsRadiator) * time) /
-        (float(boilerVolume) * float(waterHeatCapacity))
+            ((boilerPowerAngle - boilerAsRadiator) * dTime) /
+            (float(boilerVolume) * float(waterHeatCapacity))
     );
 
     if (circuitRelay) {
-        const float conduct = (boilerTemp - circuitTemp) * waterHeatCapacity * 2.639f; // 2.63 is dm^3*s^-1 of the circuit relay
-        boilerTemp -= float(double(conduct * time) / (double(circuitVolume) * waterHeatCapacity));
-        circuitTemp += float(double(conduct * time) / (double(circuitVolume) * waterHeatCapacity));
-//        DEBUG_SER_PRINT(conduct);
+        const float conduct = (boilerTemp - circuitTemp) * waterHeatCapacity * 2.639f * 0.2f; // 2.63 is dm^3*s^-1 of the circuit relay
+        boilerTemp -= float(double(conduct * dTime) / (double(circuitVolume) * waterHeatCapacity));
+        circuitTemp += float(double(conduct * dTime) / (double(circuitVolume) * waterHeatCapacity));
     }
-//    DEBUG_SER_PRINT(boilerPowerAngle);
-//    DEBUG_SER_PRINT(roomHeat);
-//    DEBUG_SER_PRINT_LN(circuitPower);
 
-    roomTemp += float(double(roomHeat * time) / (double(airKg) * 1000));
-    circuitTemp -= float(double(circuitPower * time) / (double(circuitVolume) * waterHeatCapacity));
-//    DEBUG_SER_PRINT(circuitTemp);
-//    DEBUG_SER_PRINT(boilerTemp);
-//    DEBUG_SER_PRINT_LN(roomTemp);
+    roomTemp += float(double(roomHeat * dTime) / (double(airKg) * 1000));
+    circuitTemp -= float(double(circuitPower * dTime) / (double(circuitVolume) * waterHeatCapacity));
 
     lastSimulate = millis();
+}
+
+uint8_t heatNeededCurrentFragment = 0;
+uint8_t pidRelayAtStartOfWindow = 0;
+void stateUpdate_heatNeeded_cb()
+{
+    const bool lastHeatNeeded = heatNeeded;
+    heatNeededCurrentFragment++;
+    if (heatNeededCurrentFragment >= relayWindowFragments) {
+        heatNeededCurrentFragment = 0;
+        pidRelayAtStartOfWindow = lround(pidRelayOut);
+    }
+    if (heatNeededOverride == 0) {
+        heatNeeded = pidRelayAtStartOfWindow > heatNeededCurrentFragment;
+//        heatNeeded = (heatNeeded && (roomTemp - config.refTempRoom <= (config.debounceLimitC / 2))) ||
+//                     (roomTemp - config.refTempRoom <= -(config.debounceLimitC / 2));
+    } else {
+        heatNeeded = heatNeededOverride != 1;
+    }
+    if (lastHeatNeeded != heatNeeded) {
+        notifyTask(&t_stateUpdate_angleAndRelay, false);
+#if PRINT_SERIAL_UPDATES
+        Serial.print(F("DRQ:HN:"));
+        Serial.println(heatNeeded);
+#endif
+    }
 }
 
 void stateUpdate_hotWaterProbe_cb()
@@ -366,9 +357,6 @@ void stateUpdate_readSensors_cb()
         pidRelay.Compute();
     }
 
-    DEBUG_SER_PRINT(millis());
-    DEBUG_SER_PRINT(boilerTemp);
-    DEBUG_SER_PRINT_LN(pidBoilerOut);
     if((boilerTemp != lastBoilerTemp) || (roomTemp != lastRoomTemp)) {
         notifyTask(&t_stateUpdate_angleAndRelay, false);
         notifyTask(&t_effect_printStatus, false);
@@ -418,7 +406,7 @@ void stateUpdate_angleAndRelay_cb()
     } else if (settingsSelected == MENU_POS_SERVO_MAX) {
         angle = 99;
     } else {
-        angle = pidBoilerOut + 50;
+        angle = pidBoilerOut;
 
 //        for (int i = config.curveItems - 1; i >= 0; i--) {
 //            if (boilerDelta >= maxDeltaSettings[i]) {
@@ -441,7 +429,11 @@ void stateUpdate_angleAndRelay_cb()
 //        }
     }
 
-    if (settingsSelected == -1 && (lastAngle != angle || lastCircuitRelay != circuitRelay)) {
+    if (
+            settingsSelected != MENU_POS_SERVO_MIN &&
+            settingsSelected != MENU_POS_SERVO_MAX &&
+            (lastAngle != angle || lastCircuitRelay != circuitRelay)
+    ) {
         notifyTask(&t_effect_refreshServoAndRelay, false);
         notifyTask(&t_effect_printStatus, true);
 #if PRINT_SERIAL_UPDATES
@@ -471,15 +463,15 @@ void effect_refreshServoAndRelay_cb()
         servoSetPos(0);
         sendCurrentStateToRelay(true);
     } else {
-        if (angle > currAngle + MAX_SERVO_STEP) {
-            currAngle += MAX_SERVO_STEP;
-            notifyTask(&t_effect_refreshServoAndRelay, false);
-        } else if (angle < currAngle - MAX_SERVO_STEP) {
-            currAngle -= MAX_SERVO_STEP;
-            notifyTask(&t_effect_refreshServoAndRelay, false);
-        } else {
-            currAngle = angle;
-        }
+//        if (angle > currAngle + MAX_SERVO_STEP) {
+//            currAngle += MAX_SERVO_STEP;
+//            notifyTask(&t_effect_refreshServoAndRelay, false);
+//        } else if (angle < currAngle - MAX_SERVO_STEP) {
+//            currAngle -= MAX_SERVO_STEP;
+//            notifyTask(&t_effect_refreshServoAndRelay, false);
+//        } else {
+//        }
+        currAngle = angle;
         servoSetPos(currAngle);
         sendCurrentStateToRelay(circuitRelayOrOverride);
     }
@@ -522,8 +514,16 @@ void stateUpdate_readButtons_cb()
 #endif
 }
 
+
 void stateUpdate_serialReader_cb()
 {
+    DEBUG_SER_PRINT(circuitTemp);
+    DEBUG_SER_PRINT(roomTemp);
+    DEBUG_SER_PRINT(boilerTemp);
+    DEBUG_SER_PRINT(currAngle);
+    DEBUG_SER_PRINT(heatNeeded);
+    DEBUG_SER_PRINT_LN(pidRelayOut);
+
     if (Serial.available() > 0) {
         size_t read = Serial.readBytesUntil('\n', buffer, MAX_BUFFER_LEN - 1);
         buffer[read] = '\0';
@@ -533,36 +533,17 @@ void stateUpdate_serialReader_cb()
             if (commandBuffer.startsWith(F("HNO:"))) {
                 const String &valueBuffer = commandBuffer.substring(4);
                 heatNeededOverride = strtol(valueBuffer.c_str(), nullptr, 10);
-
-                notifyTask(&t_effect_printStatus, true);
-                notifyTask(&t_stateUpdate_angleAndRelay, true);
-                notifyTask(&t_effect_refreshServoAndRelay, true);
-                notifyTask(&t_effect_processSettings, false);
-
+                notifySettingsChanged();
                 screenSaverWakeup();
-
-                DEBUG_SER_PRINT_LN(heatNeededOverride);
             } else if (commandBuffer.startsWith("O:")) {
                 const String &valueBuffer = commandBuffer.substring(2);
                 settingsSelected = MENU_POS_GATE_MANUAL;
                 angle = strtol(valueBuffer.c_str(), nullptr, 10);
-
-                notifyTask(&t_effect_printStatus, true);
-                notifyTask(&t_stateUpdate_angleAndRelay, true);
-                notifyTask(&t_effect_refreshServoAndRelay, true);
-                notifyTask(&t_effect_processSettings, false);
-
+                notifySettingsChanged();
                 screenSaverWakeup();
-
-                DEBUG_SER_PRINT_LN(angle);
             } else if (commandBuffer.startsWith(F("M:A"))) {
                 settingsSelected = -1;
-
-                notifyTask(&t_effect_printStatus, true);
-                notifyTask(&t_stateUpdate_angleAndRelay, true);
-                notifyTask(&t_effect_refreshServoAndRelay, true);
-                notifyTask(&t_effect_processSettings, false);
-
+                notifySettingsChanged();
                 screenSaverWakeup();
             } else {
                 Serial.print(F("Unknown command: "));
@@ -570,6 +551,13 @@ void stateUpdate_serialReader_cb()
             }
         }
     }
+}
+
+void notifySettingsChanged() {
+    notifyTask(&t_effect_printStatus, true);
+    notifyTask(&t_stateUpdate_angleAndRelay, true);
+    notifyTask(&t_effect_refreshServoAndRelay, true);
+    notifyTask(&t_effect_processSettings, false);
 }
 
 void effect_processSettings_cb()
@@ -581,7 +569,7 @@ void effect_processSettings_cb()
     pidBoilerSet = config.refTempBoiler;
     pidRelaySet = config.refTempRoom;
     pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
-    pidBoiler.SetTunings(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
+    pidRelay.SetTunings(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
 #if PRINT_SERIAL_UPDATES
     Serial.print(F("DRQ:R:"));
     Serial.println(String(relay_or_override()));
@@ -809,7 +797,7 @@ bool processSettings()
 }
 
 
-#define EEPROM_MAGIC 0xDEADBE00
+#define EEPROM_MAGIC 0xDEADBE01
 
 void eepromInit()
 {

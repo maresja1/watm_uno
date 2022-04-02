@@ -31,8 +31,13 @@
 
 #define PRINT_SERIAL_UPDATES 0
 
-#define DEBUG_SER_PRINT(x) do { Serial.print(F(#x": ")); Serial.print(x); Serial.print(F(", ")); } while(0)
-#define DEBUG_SER_PRINT_LN(x) do { Serial.print(F(#x": ")); Serial.print(x); Serial.println(""); } while(0)
+#if 0
+#define DEBUG_SER_PRINT(x) do { Serial.print(F(#x":")); Serial.print(x); Serial.print(F(",")); } while(0)
+#define DEBUG_SER_PRINT_LN(x) do { Serial.print(F(#x":")); Serial.println(x); } while(0)
+#else
+#define DEBUG_SER_PRINT(x) do { Serial.print(x); Serial.print(F(",")); } while(0)
+#define DEBUG_SER_PRINT_LN(x) do { Serial.println(x); } while(0)
+#endif
 
 #define MENU_POS_GATE_MANUAL 0
 #define MENU_POS_SERVO_MIN 5
@@ -83,8 +88,8 @@ float readTemp(uint8_t pin);
 bool processSettings();
 void printStatus();
 void servoSetPos(int positionPercent);
-void notifyChangeState(bool immediate);
 void sendCurrentStateToRelay(bool state);
 void screenSaverWakeup();
+void notifySettingsChanged();
 
 #endif //THERMOINO_H
