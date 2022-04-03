@@ -32,7 +32,8 @@ void stateUpdate_angleAndRelay_cb();
 void stateUpdate_readButtons_cb();
 void effect_processSettings_cb();
 
-const float simulationSpeed = 10.0f;
+const bool isSimulation = true;
+const float simulationSpeed = 1.0f;
 
 Scheduler runner;
 //Tasks
@@ -71,6 +72,8 @@ DallasTemperature dtTempBoiler(&oneWire_TempBoiler);
 // servo allowing air to come in the boiler (attached to the gate)
 Servo servo;
 
+const uint8_t relayWindowFragments = 10;
+
 Configuration config = {
     .refTempBoiler = 70,
     .refTempBoilerIdle = 50,
@@ -86,13 +89,13 @@ Configuration config = {
     .deltaTempPoly0 = 0.0f, //1.612f,
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
-    .pidKp = 10.0f,
-    .pidKi = 0.7f,
-    .pidKd = 0.05f,
+    .pidKp = 8.0f,
+    .pidKi = 0.0f,
+    .pidKd = 0.005f,
     // K_u = 0.5 (maybe less), T_u = 800s
-    .pidRelayKp = 1.8f,
-    .pidRelayKi = 0.05f,
-    .pidRelayKd = 0.00f,
+    .pidRelayKp = 0.5f * relayWindowFragments,
+    .pidRelayKi = 0.001f,
+    .pidRelayKd = 0.0f,
 };
 
 char buffer[MAX_BUFFER_LEN];
@@ -102,7 +105,7 @@ uint8_t currAngle = 50;
 int16_t settingsSelected = -1;
 int16_t settingsSelectedPrint = -1;
 float boilerTemp = 50.0f;
-float roomTemp = 21.8f;
+float roomTemp = 20.0f;
 float roomHumidity = 0.0f;
 bool heatNeeded = false;
 uint8_t heatNeededOverride = 0; // 0 no override, 1 - override false, 2 or else - override true
@@ -118,16 +121,13 @@ bool hotWaterProbeHadRelayOn = false;
 bool hotWaterProbeEnforced = false;
 uint8_t hotWaterProbeCycles = 0;
 
-const bool isSimulation = true;
-
 float pidBoilerSet = 0, pidBoilerIn = 0, pidBoilerOut = 0;
 // K_u = 100 (maybe less), T_u = 30s (pretty stable)
 //PID pidBoiler(&pidBoilerIn, &pidBoilerOut, &pidBoilerSet, 33.33f, 0.1f, 0.0f, DIRECT);
 QuickPID pidBoiler(&pidBoilerIn, &pidBoilerOut, &pidBoilerSet);
-sTune tuner(&pidBoilerIn, &pidBoilerOut, tuner.ZN_PID, tuner.directIP, tuner.printALL);
+//sTune tuner(&pidBoilerIn, &pidBoilerOut, tuner.ZN_PID, tuner.directIP, tuner.printOFF);
 
 float pidRelaySet = 0, pidRelayIn = 0, pidRelayOut = 0;
-const uint8_t relayWindowFragments = 100;
 // K_u = 0.5f, T_u = 280s
 //PID pidRelay(&pidRelayIn, &pidRelayOut, &pidRelaySet, 0.5f, 0.0f, 0.0f, DIRECT);
 QuickPID pidRelay(&pidRelayIn, &pidRelayOut, &pidRelaySet);
@@ -227,9 +227,11 @@ const float radiatorVolume = 5.8f;
 const int8_t boilerVolume = 36;
 const uint32_t boilerPower = 18000;
 const int16_t waterHeatCapacity = 4180;
-const int16_t airKg = 320;
-float circuitTemp = 40;
+const uint32_t heatedAirOtherCapacity = 2000000;
+const int8_t outsideTemp = 10;
 const int16_t circuitVolume = int16_t(radiatorCount * radiatorVolume);
+
+float circuitTemp = 40;
 
 unsigned long lastSimulate = UINT64_MAX;
 void stateUpdate_simulator_cb()
@@ -242,7 +244,7 @@ void stateUpdate_simulator_cb()
     const float circuitPower = float(radiatorCount) * simulate_radiatorPower(circuitTemp - roomTemp);
 
     // max 8 kW (temp difference 20 C) lost due to insulation
-    const float insulationLost = max(0, 8000.0f * ((roomTemp - 10) / 20)) ;
+    const float insulationLost = max(0, 8000.0f * ((roomTemp - outsideTemp) / 20)) ;
     const float boilerAsRadiator = simulate_radiatorPower(boilerTemp - roomTemp) * 2;
     const float roomHeat = circuitPower + boilerAsRadiator - insulationLost;
 
@@ -259,13 +261,13 @@ void stateUpdate_simulator_cb()
         circuitTemp += float(double(conduct * dTime) / (double(circuitVolume) * waterHeatCapacity));
     }
 
-    roomTemp += float(double(roomHeat * dTime) / (double(airKg) * 1000));
+    roomTemp += float(double(roomHeat * dTime) / heatedAirOtherCapacity);
     circuitTemp -= float(double(circuitPower * dTime) / (double(circuitVolume) * waterHeatCapacity));
 
     lastSimulate = millis();
 }
 
-uint8_t heatNeededCurrentFragment = 0;
+uint8_t heatNeededCurrentFragment = relayWindowFragments * 0.8f;
 uint8_t pidRelayAtStartOfWindow = 0;
 void stateUpdate_heatNeeded_cb()
 {
@@ -522,7 +524,7 @@ void stateUpdate_serialReader_cb()
     DEBUG_SER_PRINT(boilerTemp);
     DEBUG_SER_PRINT(currAngle);
     DEBUG_SER_PRINT(heatNeeded);
-    DEBUG_SER_PRINT_LN(pidRelayOut);
+    DEBUG_SER_PRINT_LN(pidRelayAtStartOfWindow);
 
     if (Serial.available() > 0) {
         size_t read = Serial.readBytesUntil('\n', buffer, MAX_BUFFER_LEN - 1);
