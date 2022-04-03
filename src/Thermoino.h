@@ -6,7 +6,7 @@
 #ifndef THERMOINO_H
 #define THERMOINO_H
 
-#define DEBUG_LEVEL 1
+#define DEBUG_LEVEL 0
 #define DT_BOILER_PIN 11
 #define SERVO_PIN 10
 #define CIRCUIT_RELAY_PIN 9
@@ -40,8 +40,9 @@
 #endif
 
 #define MENU_POS_GATE_MANUAL 0
-#define MENU_POS_SERVO_MIN 5
-#define MENU_POS_SERVO_MAX 6
+#define MENU_POS_HEAT_MANUAL 1
+#define MENU_POS_SERVO_MIN 6
+#define MENU_POS_SERVO_MAX 7
 
 #define MAX_BUFFER_LEN 20
 extern char buffer[];
@@ -84,7 +85,6 @@ typedef struct Button {
 
 void eepromInit();
 void eepromUpdate();
-float readTemp(uint8_t pin);
 bool processSettings();
 void printStatus();
 void servoSetPos(int positionPercent);

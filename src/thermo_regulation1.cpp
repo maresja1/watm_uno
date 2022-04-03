@@ -8,7 +8,6 @@
 
 #if USE_DHT_ROOM_TEMP
 #include <DHT.h>
-#include <DHT_U.h>
 #endif
 #include <LiquidCrystal_I2C.h>
 #include <Servo.h>
@@ -32,8 +31,8 @@ void stateUpdate_angleAndRelay_cb();
 void stateUpdate_readButtons_cb();
 void effect_processSettings_cb();
 
-const bool isSimulation = true;
-const float simulationSpeed = 1.0f;
+#define USE_SIMULATION 1
+const float simulationSpeed = 10.0f;
 
 Scheduler runner;
 //Tasks
@@ -59,12 +58,12 @@ Task t_effect_processSettings(2e3, 1, &effect_processSettings_cb, &runner);
 // initialize the library with the numbers of the interface pins
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
-#if USE_DHT_ROOM_TEMP
+#if USE_DHT_ROOM_TEMP && !USE_SIMULATION
 // instance of digital thermometer
 DHT digitalThermometer(DHT21_PIN, DHT21);
 #endif
 
-#if USE_DT_ROOM_BOILER
+#if USE_DT_ROOM_BOILER && !USE_SIMULATION
 OneWire oneWire_TempBoiler(DT_BOILER_PIN);
 DallasTemperature dtTempBoiler(&oneWire_TempBoiler);
 #endif
@@ -89,19 +88,19 @@ Configuration config = {
     .deltaTempPoly0 = 0.0f, //1.612f,
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
-    .pidKp = 8.0f,
-    .pidKi = 0.0f,
-    .pidKd = 0.005f,
+    .pidKp = 1.0f,
+    .pidKi = 0.2f,
+    .pidKd = 0.2f,
     // K_u = 0.5 (maybe less), T_u = 800s
-    .pidRelayKp = 0.5f * relayWindowFragments,
-    .pidRelayKi = 0.001f,
-    .pidRelayKd = 0.0f,
+    .pidRelayKp = 0.5f,
+    .pidRelayKi = 0.05f,
+    .pidRelayKd = 0.1f,
 };
 
 char buffer[MAX_BUFFER_LEN];
 
-uint8_t angle = 50;
-uint8_t currAngle = 50;
+uint8_t angle = 11;
+uint8_t currAngle = 11;
 int16_t settingsSelected = -1;
 int16_t settingsSelectedPrint = -1;
 float boilerTemp = 50.0f;
@@ -125,7 +124,8 @@ float pidBoilerSet = 0, pidBoilerIn = 0, pidBoilerOut = 0;
 // K_u = 100 (maybe less), T_u = 30s (pretty stable)
 //PID pidBoiler(&pidBoilerIn, &pidBoilerOut, &pidBoilerSet, 33.33f, 0.1f, 0.0f, DIRECT);
 QuickPID pidBoiler(&pidBoilerIn, &pidBoilerOut, &pidBoilerSet);
-//sTune tuner(&pidBoilerIn, &pidBoilerOut, tuner.ZN_PID, tuner.directIP, tuner.printOFF);
+//sTune tuner(&pidBoilerIn, &pidBoilerOut, sTune::NoOvershoot_PID, sTune::directIP, sTune::printOFF);
+
 
 float pidRelaySet = 0, pidRelayIn = 0, pidRelayOut = 0;
 // K_u = 0.5f, T_u = 280s
@@ -161,19 +161,19 @@ void setup()
     lcd.print(F("Booting"));
 
     // set up DHT
-#if USE_DHT_ROOM_TEMP
+#if USE_DHT_ROOM_TEMP && !USE_SIMULATION
     digitalThermometer.begin();
 #endif
 
     delay(1000);
     lcd.write(".");
-#if USE_DT_ROOM_BOILER
+#if USE_DT_ROOM_BOILER && !USE_SIMULATION
     dtTempBoiler.begin();
-#endif
 
     dtTempBoiler.getAddress(&deviceAddress, 0);
     dtTempBoiler.setWaitForConversion(false);
     dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
+#endif
 
     pidBoiler.SetOutputLimits(0.0f, 99.0f);
     pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
@@ -181,7 +181,7 @@ void setup()
 
     pidRelay.SetTunings(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
     pidRelay.SetOutputLimits(0.0f, float(relayWindowFragments));
-    pidRelay.SetMode(QuickPID::Control::timer);
+//    pidRelay.SetMode(QuickPID::Control::timer);
 
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
@@ -204,6 +204,7 @@ void setup()
 //    Serial.println(F("Setup finished..."));
 
     effect_processSettings_cb();
+//    tuner.Configure(100, 99, 11, 12, 500, 50, 200);
 }
 
 void loop()
@@ -223,13 +224,12 @@ float simulate_radiatorPower(float deltaTemp)
 }
 
 const int8_t radiatorCount = 10;
-const float radiatorVolume = 5.8f;
 const int8_t boilerVolume = 36;
 const uint32_t boilerPower = 18000;
-const int16_t waterHeatCapacity = 4180;
+#define waterHeatCapacity 4180
 const uint32_t heatedAirOtherCapacity = 2000000;
 const int8_t outsideTemp = 10;
-const int16_t circuitVolume = int16_t(radiatorCount * radiatorVolume);
+const int16_t circuitVolume = int16_t(radiatorCount * 5.8f);
 
 float circuitTemp = 40;
 
@@ -322,7 +322,7 @@ void stateUpdate_readSensors_cb()
     const float lastBoilerTemp = boilerTemp;
     const float lastRoomTemp = roomTemp;
 
-    if (!isSimulation) {
+#if !USE_SIMULATION
 #if USE_DHT_ROOM_TEMP
         float lastReading = digitalThermometer.readTemperature(false, false) + config.roomTempAdjust;
         if (roomTemp > 0.0f) {
@@ -342,9 +342,9 @@ void stateUpdate_readSensors_cb()
 #else
         boilerTemp = readTemp(BOILER_THERM_PIN);
 #endif
-    } else {
-        stateUpdate_simulator_cb();
-    }
+#else
+    stateUpdate_simulator_cb();
+#endif
 
     // roomTemp is not NaN
     if (roomTemp == roomTemp) {
@@ -354,6 +354,17 @@ void stateUpdate_readSensors_cb()
     pidBoilerIn = boilerTemp;
     pidRelayIn = roomTemp;
 
+//    switch (tuner.Run()) {
+//        case tuner.sample:
+//            break;
+//        case tuner.tunings:
+//            tuner.GetAutoTunings(&config.pidKp, &config.pidKi, &config.pidKd);
+//            pidBoiler.SetMode(QuickPID::Control::timer);
+//            pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
+//            break;
+//        case tuner.runPid:
+//            break;
+//    }
     pidBoiler.Compute();
     if (!underheating) {
         pidRelay.Compute();
@@ -568,6 +579,7 @@ void effect_processSettings_cb()
     DEBUG_TASK_ENTRY("stateUpdate_readButtons");
 #endif
     eepromUpdate();
+    pidRelay.SetMode(settingsSelected == MENU_POS_HEAT_MANUAL ? QuickPID::Control::manual : QuickPID::Control::timer);
     pidBoilerSet = config.refTempBoiler;
     pidRelaySet = config.refTempRoom;
     pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
@@ -591,30 +603,6 @@ void notifyTask(Task *task, bool immediate)
 void sendCurrentStateToRelay(const bool state) {
     hotWaterProbeHadRelayOn |= state;
     digitalWrite(CIRCUIT_RELAY_PIN, !state);
-}
-
-
-// (1/T_0); T_0 = 25 C => 1 / (25 + 237.15) => 0.00381461f
-#define THERM_RESIST_SERIAL 10000
-#define THERM_REF_TEMP_INV 0.003354016f
-#define THERM_REF_RESIST 10000
-#define THERM_BETA 3977
-
-float readTemp(uint8_t pin)
-{
-    analogRead(pin);
-    delay(10);
-    int V_out = analogRead(pin);
-    // R_1 = R_2 * ( V_in / V_out - 1 ); V_in = 1023 (3.3V after conv.), R_2 = #THERM_RESIST_SERIAL
-    float R_1 = (float(THERM_RESIST_SERIAL) * float(V_out)) / float (1023 - V_out);
-#if DEBUG_LEVEL > 2
-    DEBUG_SER_PRINT(V_out);
-    DEBUG_SER_PRINT(R_1);
-    DEBUG_SER_PRINT_LN(THERM_RESIST_SERIAL);
-#endif
-    // 1 / T = 1 / T_0 + 1 / B * ln(R_1 / R_0); (1 / T_0) = #THERM_REF_TEMP_INV, R_0 = #THERM_REF_RESIST, B = #THERM_BETA
-    float T = float((1 / (THERM_REF_TEMP_INV + (log(R_1 / THERM_REF_RESIST) / THERM_BETA))) - 273.15f);
-    return lround(T * 16) / 16.0f;
 }
 
 int8_t readButton(Button_t *button)
@@ -705,20 +693,15 @@ void printStatusOverviewBottom()
     lcd.noCursor();
     lcd.setCursor(0, 1);
     // 2 + 4 + 2 = 8 chars
-    if (!isSimulation) {
-        snprintf(buffer, MAX_BUFFER_LEN, "H %2d%% ", (int) roomHumidity);
-        lcd.print(buffer);
-    } else {
-        snprintf(buffer, MAX_BUFFER_LEN, "%4.1f\xDF ", (double)circuitTemp);
-        lcd.print(buffer);
-    }
+    snprintf(buffer, MAX_BUFFER_LEN, "H %2d%% ", lround((float(pidRelayAtStartOfWindow) / relayWindowFragments) * 99));
+    lcd.print(buffer);
     // 2 + 4 + 1 = 7 chars
     snprintf(buffer, MAX_BUFFER_LEN, "R %4.1f\xDF", (double)roomTemp);
     lcd.print(buffer);
     if (heatNeededOverride != 0) {
-        lcd.print("  \x5E");
+        lcd.print(("  \x5E"));
     } else {
-        lcd.print("   ");
+        lcd.print(("   "));
     }
 }
 

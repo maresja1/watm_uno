@@ -2,6 +2,7 @@
 #include "menu_formatters.h"
 
 const char menuManual[] PROGMEM = "Manual %";
+const char menuManualHeating[] PROGMEM = "Manual H %";
 const char menuBoilerTemp[] PROGMEM = "Boiler \xDF";
 const char menuRoomTemp[] PROGMEM = "Room \xDF";
 const char menuCircuitRelay[] PROGMEM = "Circuit Relay";
@@ -20,13 +21,19 @@ const char menuRelayPIDp[] PROGMEM = "[E] RelPID K_p";
 const char menuRelayPIDi[] PROGMEM = "[E] RelPID K_i";
 const char menuRelayPIDd[] PROGMEM = "[E] RelPID K_d";
 
-#define MENU_STATIC_ITEMS 19
+#define MENU_STATIC_ITEMS 20
 const ConfigMenuItem_t menu[] = {
         {
                 .name = menuManual,
                 .param = nullptr,
-                .handler = &menuHandlerGate,
+                .handler = &menuHandlerVent,
                 .formatter = &menuFormatterUInt8Value
+        },
+        {
+                .name = menuManualHeating,
+                .param = nullptr,
+                .handler = &menuHandlerHeating,
+                .formatter = &menuFormatterFloatValue
         },
         {
                 .name = menuBoilerTemp,

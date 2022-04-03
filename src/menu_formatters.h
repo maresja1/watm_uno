@@ -2,7 +2,7 @@
 void menuFormatterUInt8Value(__attribute__((unused)) void *param, Print &print, void *value)
 {
     lcd.cursor();
-    print.print(F("value: "));
+    print.print("value: ");
     snprintf(buffer, MAX_BUFFER_LEN, "%8d", *(uint8_t *) value);
     print.print(buffer);
     buffer[0] = '\0';
@@ -11,25 +11,25 @@ void menuFormatterUInt8Value(__attribute__((unused)) void *param, Print &print, 
 void menuFormatterInt16Value(__attribute__((unused)) void *param, Print &print, void *value)
 {
     lcd.cursor();
-    print.print(F("value: "));
+    print.print("value: ");
     snprintf(buffer, MAX_BUFFER_LEN, "%8d", *(int16_t *) value);
     print.print(buffer);
     buffer[0] = '\0';
 }
 
-__attribute__((unused)) void menuFormatterInt8Value(__attribute__((unused)) void *param, Print &print, void *value)
-{
-    lcd.cursor();
-    print.print(F("value: "));
-    snprintf(buffer, MAX_BUFFER_LEN, "%8d", *(int8_t *) value);
-    print.print(buffer);
-    buffer[0] = '\0';
-}
+//void menuFormatterInt8Value(__attribute__((unused)) void *param, Print &print, void *value)
+//{
+//    lcd.cursor();
+//    print.print("value: ");
+//    snprintf(buffer, MAX_BUFFER_LEN, "%8d", *(int8_t *) value);
+//    print.print(buffer);
+//    buffer[0] = '\0';
+//}
 
 void menuFormatterFloatValue(__attribute__((unused)) void *param, Print &print, void *value)
 {
     lcd.cursor();
-    print.print(F("value: "));
+    print.print("value: ");
     snprintf(buffer, MAX_BUFFER_LEN, "%8.3f", (double)*(float*)value);
     print.print(buffer);
     buffer[0] = '\0';

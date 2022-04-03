@@ -1,19 +1,31 @@
 #include "Thermoino.h"
 
-void *menuHandlerGate(__attribute__((unused)) void *param, int8_t diff)
+void *menuHandlerVent(__attribute__((unused)) void *param, int8_t diff)
 {
-    angle += (diff * 5);
+    angle += diff;
     if (angle < 0 || angle > 200 /* overflow */) {
         angle = 0;
     }
     if (angle >= 100) {
         angle = 99;
     }
-    if (diff != 0 && angle != 99 && angle % 5 != 0) {
-        angle = (angle / 5) * 5;
-    }
+//    if (diff != 0 && angle != 99 && angle % 5 != 0) {
+//        angle = (angle / 5) * 5;
+//    }
     currAngle = angle;
     return &angle;
+}
+
+void *menuHandlerHeating(__attribute__((unused)) void *param, int8_t diff)
+{
+    pidRelayOut += float(diff);
+    if (pidRelayOut < 0) {
+        pidRelayOut = 0.0f;
+    }
+    if (pidRelayOut  > 10) {
+        pidRelayOut = 10.0f;
+    }
+    return &pidRelayOut;
 }
 
 void *menuHandlerBoiler(__attribute__((unused)) void *param, int8_t diff)
@@ -120,11 +132,11 @@ void *menuHandlerOverheatingLimit(__attribute__((unused)) void *param, int8_t di
     return &config.overheatingLimit;
 }
 
-void *menuHandlerUnderheatingLimit(__attribute__((unused)) void *param, int8_t diff)
-{
-    config.underheatingLimit += diff;
-    return &config.underheatingLimit;
-}
+//void *menuHandlerUnderheatingLimit(__attribute__((unused)) void *param, int8_t diff)
+//{
+//    config.underheatingLimit += diff;
+//    return &config.underheatingLimit;
+//}
 
 void *menuHandlerDeltaTempPoly0(__attribute__((unused)) void *param, int8_t diff)
 {
