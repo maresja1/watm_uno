@@ -6,6 +6,11 @@
 #ifndef THERMOINO_H
 #define THERMOINO_H
 
+#define _TASK_INLINE
+
+#include <TaskScheduler.h>
+#include <LiquidCrystal_I2C.h>
+
 #define DEBUG_LEVEL 0
 #define DT_BOILER_PIN 11
 #define SERVO_PIN 10
@@ -29,7 +34,7 @@
 #define DEBUG_TASK_RET(x)
 #endif
 
-#define PRINT_SERIAL_UPDATES 0
+#define PRINT_SERIAL_UPDATES 1
 
 #if 0
 #define DEBUG_SER_PRINT(x) do { Serial.print(F(#x":")); Serial.print(x); Serial.print(F(",")); } while(0)
@@ -77,6 +82,35 @@ struct Configuration {
     float pidRelayKd;
 };
 
+extern Configuration config;
+extern uint8_t angle;
+extern uint8_t currAngle;
+extern int16_t settingsSelected;
+extern int16_t settingsSelectedPrint;
+extern float boilerTemp;
+extern float roomTemp;
+extern float roomHumidity;
+extern bool heatNeeded;
+extern uint8_t heatNeededOverride; // 0 no override, 1 - override false, 2 or else - override true
+extern bool overheating;
+extern bool underheating;
+extern bool circuitRelay;
+
+extern Task t_stateUpdate_readButtons;
+extern Task t_stateUpdate_angleAndRelay;
+extern Task t_stateUpdate_readSensors;
+extern Task t_stateUpdate_hotWaterProbe;
+extern Task t_stateUpdate_heatNeeded;
+extern Task t_stateUpdate_serialReader;
+extern Task t_effect_refreshServoAndRelay;
+extern Task t_effect_printStatus;
+extern Task t_effect_processSettings;
+
+extern float pidRelaySet;
+extern float pidRelayIn;
+extern float pidRelayOut;
+extern LiquidCrystal_I2C lcd;
+
 typedef struct Button {
     uint8_t pin;
     uint8_t state;
@@ -91,5 +125,22 @@ void servoSetPos(int positionPercent);
 void sendCurrentStateToRelay(bool state);
 void screenSaverWakeup();
 void notifySettingsChanged();
+
+void stateUpdate_heatNeeded_cb();
+void stateUpdate_simulator_cb();
+void stateUpdate_serialReader_cb();
+void stateUpdate_hotWaterProbe_cb();
+void stateUpdate_readSensors_cb();
+void effect_refreshServoAndRelay_cb();
+void effect_printStatus_cb();
+void stateUpdate_angleAndRelay_cb();
+void stateUpdate_readButtons_cb();
+void effect_processSettings_cb();
+
+void serialLineBufferLoop();
+
+void notifyTask(Task *task, bool immediate);
+
+#include "menu.h"
 
 #endif //THERMOINO_H

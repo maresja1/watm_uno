@@ -1,5 +1,18 @@
 #include "Thermoino.h"
 
+struct ConfigMenuItem bufferMenuItem;
+
+const struct ConfigMenuItem *getMenu(int16_t itemIndex)
+{
+    const ConfigMenuItem_t *pItem = &menu[itemIndex];
+    bufferMenuItem.param = pItem->param;
+    bufferMenuItem.formatter = pItem->formatter;
+    bufferMenuItem.handler = pItem->handler;
+    strncpy_P(buffer, pItem->name, MAX_BUFFER_LEN);
+    bufferMenuItem.name = buffer;
+    return &bufferMenuItem;
+}
+
 void *menuHandlerVent(__attribute__((unused)) void *param, int8_t diff)
 {
     angle += diff;
@@ -192,4 +205,60 @@ void *menuHandlerRelayPID_i(__attribute__((unused)) void *param, int8_t diff)
 void *menuHandlerRelayPID_d(__attribute__((unused)) void *param, int8_t diff)
 {
     return handlePIDValueConfig(&config.pidRelayKd, diff);
+}
+
+void menuFormatterUInt8Value(__attribute__((unused)) void *param, Print &print, void *value)
+{
+    lcd.cursor();
+    print.print("value: ");
+    snprintf(buffer, MAX_BUFFER_LEN, "%8d", *(uint8_t *) value);
+    print.print(buffer);
+    buffer[0] = '\0';
+}
+
+void menuFormatterInt16Value(__attribute__((unused)) void *param, Print &print, void *value)
+{
+    lcd.cursor();
+    print.print("value: ");
+    snprintf(buffer, MAX_BUFFER_LEN, "%8d", *(int16_t *) value);
+    print.print(buffer);
+    buffer[0] = '\0';
+}
+
+//void menuFormatterInt8Value(__attribute__((unused)) void *param, Print &print, void *value)
+//{
+//    lcd.cursor();
+//    print.print("value: ");
+//    snprintf(buffer, MAX_BUFFER_LEN, "%8d", *(int8_t *) value);
+//    print.print(buffer);
+//    buffer[0] = '\0';
+//}
+
+void menuFormatterFloatValue(__attribute__((unused)) void *param, Print &print, void *value)
+{
+    lcd.cursor();
+    print.print("value: ");
+    double doubleValue = (double) *(float *) value;
+    if (doubleValue >= 1.0f || doubleValue <= -1.0f) {
+        snprintf(buffer, MAX_BUFFER_LEN, "%8.3f", doubleValue);
+    } else {
+        snprintf(buffer, MAX_BUFFER_LEN, "%8.4f", doubleValue);
+    }
+    print.print(buffer);
+    buffer[0] = '\0';
+}
+
+void menuFormatterCircuitOverride(__attribute__((unused)) void *param, Print &print, void *value)
+{
+    switch (*(int8_t *) value) {
+        case 0:
+            print.print(F("no override"));
+            break;
+        case 1:
+            print.print(F("always enabled"));
+            break;
+        case 2:
+            print.print(F("always disabled"));
+            break;
+    }
 }

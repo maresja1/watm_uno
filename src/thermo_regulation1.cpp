@@ -9,7 +9,6 @@
 #if USE_DHT_ROOM_TEMP
 #include <DHT.h>
 #endif
-#include <LiquidCrystal_I2C.h>
 #include <Servo.h>
 #include <TaskScheduler.h>
 
@@ -17,19 +16,6 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #endif
-
-void notifyTask(Task *task, bool immediate);
-
-void stateUpdate_heatNeeded_cb();
-void stateUpdate_simulator_cb();
-void stateUpdate_serialReader_cb();
-void stateUpdate_hotWaterProbe_cb();
-void stateUpdate_readSensors_cb();
-void effect_refreshServoAndRelay_cb();
-void effect_printStatus_cb();
-void stateUpdate_angleAndRelay_cb();
-void stateUpdate_readButtons_cb();
-void effect_processSettings_cb();
 
 #define USE_SIMULATION 1
 const float simulationSpeed = 1.0f;
@@ -211,6 +197,7 @@ void setup()
 void loop()
 {
     runner.execute();
+    serialLineBufferLoop();
 }
 
 float simulate_radiatorPower(float deltaTemp)
@@ -290,6 +277,8 @@ void stateUpdate_heatNeeded_cb()
 #if PRINT_SERIAL_UPDATES
         Serial.print(F("DRQ:HN:"));
         Serial.println(heatNeeded);
+        Serial.print(F("DRQ:HPWM:"));
+        Serial.println(pidRelayAtStartOfWindow);
 #endif
     }
 }
@@ -381,13 +370,6 @@ void stateUpdate_readSensors_cb()
         Serial.print(F("DRQ:BT:"));
         Serial.println(String(boilerTemp));
 #endif
-    } else {
-#if DEBUG_LEVEL > 1
-        DEBUG_SER_PRINT(boilerTemp);
-        DEBUG_SER_PRINT(lastBoilerTemp);
-        DEBUG_SER_PRINT(roomTemp);
-        DEBUG_SER_PRINT_LN(lastRoomTemp);
-#endif
     }
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_RET("stateUpdate_readSensors");
@@ -453,8 +435,6 @@ void stateUpdate_angleAndRelay_cb()
 #if PRINT_SERIAL_UPDATES
         Serial.print(F("DRQ:O:"));
         Serial.println(angle);
-        Serial.print(F("DRQ:HN:"));
-        Serial.println(heatNeeded);
         Serial.print(F("DRQ:R:"));
         Serial.println(String(relay_or_override()));
 #endif
@@ -500,13 +480,6 @@ void effect_printStatus_cb()
     DEBUG_TASK_ENTRY("effect_printStatus");
 #endif
     printStatus();
-#if DEBUG_LEVEL > 1
-    DEBUG_SER_PRINT(boilerTemp);
-    DEBUG_SER_PRINT(roomTemp);
-    DEBUG_SER_PRINT(angle);
-    DEBUG_SER_PRINT(overheating);
-    DEBUG_SER_PRINT_LN(underheating);
-#endif
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_RET("effect_printStatus");
 #endif
@@ -528,52 +501,6 @@ void stateUpdate_readButtons_cb()
 #endif
 }
 
-
-void stateUpdate_serialReader_cb()
-{
-    DEBUG_SER_PRINT(circuitTemp);
-    DEBUG_SER_PRINT(roomTemp);
-    DEBUG_SER_PRINT(boilerTemp);
-    DEBUG_SER_PRINT(currAngle);
-    DEBUG_SER_PRINT(heatNeeded);
-    DEBUG_SER_PRINT_LN(pidRelayOut);
-
-    if (Serial.available() > 0) {
-        size_t read = Serial.readBytesUntil('\n', buffer, MAX_BUFFER_LEN - 1);
-        buffer[read] = '\0';
-        const String &sBuffer = String(buffer);
-        if (sBuffer.startsWith(F("DRQ:"))) {
-            const String &commandBuffer = sBuffer.substring(4);
-            if (commandBuffer.startsWith(F("HNO:"))) {
-                const String &valueBuffer = commandBuffer.substring(4);
-                heatNeededOverride = strtol(valueBuffer.c_str(), nullptr, 10);
-                notifySettingsChanged();
-                screenSaverWakeup();
-            } else if (commandBuffer.startsWith("O:")) {
-                const String &valueBuffer = commandBuffer.substring(2);
-                settingsSelected = MENU_POS_VENT_MANUAL;
-                angle = strtol(valueBuffer.c_str(), nullptr, 10);
-                notifySettingsChanged();
-                screenSaverWakeup();
-            } else if (commandBuffer.startsWith(F("M:A"))) {
-                settingsSelected = -1;
-                notifySettingsChanged();
-                screenSaverWakeup();
-            } else {
-                Serial.print(F("Unknown command: "));
-                Serial.println(sBuffer);
-            }
-        }
-    }
-}
-
-void notifySettingsChanged() {
-    notifyTask(&t_effect_printStatus, true);
-    notifyTask(&t_stateUpdate_angleAndRelay, true);
-    notifyTask(&t_effect_refreshServoAndRelay, true);
-    notifyTask(&t_effect_processSettings, false);
-}
-
 void effect_processSettings_cb()
 {
 #if DEBUG_LEVEL > 1
@@ -589,6 +516,12 @@ void effect_processSettings_cb()
 #if PRINT_SERIAL_UPDATES
     Serial.print(F("DRQ:R:"));
     Serial.println(String(relay_or_override()));
+    Serial.print(F("DRQ:O:"));
+    Serial.println(angle);
+    Serial.print(F("DRQ:BRT:"));
+    Serial.println(config.refTempBoiler);
+    Serial.print(F("DRQ:SET:"));
+    Serial.println(settingsSelected);
 #endif
 }
 
@@ -623,10 +556,6 @@ int8_t readButton(Button_t *button)
     }
     return 0;
 }
-
-struct ConfigMenuItem bufferMenuItem;
-
-#include "menu.h"
 
 Button_t btn1 = {
     .pin = BTN_1_PIN,

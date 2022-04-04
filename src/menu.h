@@ -1,5 +1,28 @@
-#include "menu_handlers.h"
-#include "menu_formatters.h"
+void *menuHandlerVent(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerHeating(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerBoiler(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerBoilerIdle(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerRoom(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerRoomTempAdjust(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerDebounceLimitC(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerCircuitRelayForced(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerServoMin(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerServoMax(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerOverheatingLimit(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerDeltaTempPoly0(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerDeltaTempPoly1(__attribute__((unused)) void *param, int8_t diff);
+void *handlePIDValueConfig(float *floatVal, int8_t diff);
+void *menuHandlerPID_p(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerPID_i(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerPID_d(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerRelayPID_p(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerRelayPID_i(__attribute__((unused)) void *param, int8_t diff);
+void *menuHandlerRelayPID_d(__attribute__((unused)) void *param, int8_t diff);
+
+void menuFormatterUInt8Value(__attribute__((unused)) void *param, Print &print, void *value);
+void menuFormatterInt16Value(__attribute__((unused)) void *param, Print &print, void *value);
+void menuFormatterFloatValue(__attribute__((unused)) void *param, Print &print, void *value);
+void menuFormatterCircuitOverride(__attribute__((unused)) void *param, Print &print, void *value);
 
 const char menuManual[] PROGMEM = "Manual %";
 const char menuManualHeating[] PROGMEM = "Manual H %";
@@ -139,13 +162,4 @@ const ConfigMenuItem_t menu[] = {
         }
 };
 
-const struct ConfigMenuItem *getMenu(int16_t itemIndex)
-{
-    const ConfigMenuItem_t *pItem = &menu[itemIndex];
-    bufferMenuItem.param = pItem->param;
-    bufferMenuItem.formatter = pItem->formatter;
-    bufferMenuItem.handler = pItem->handler;
-    strncpy_P(buffer, pItem->name, MAX_BUFFER_LEN);
-    bufferMenuItem.name = buffer;
-    return &bufferMenuItem;
-}
+const struct ConfigMenuItem *getMenu(int16_t itemIndex);
