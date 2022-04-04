@@ -152,7 +152,12 @@ void *menuHandlerDeltaTempPoly1(__attribute__((unused)) void *param, int8_t diff
 
 void *handlePIDValueConfig(float *floatVal, int8_t diff)
 {
-    *floatVal += float(diff) * (*floatVal > 5 ? 0.5f : (*floatVal > 0.5f ? 0.05f : 0.001f));
+    *floatVal += float(diff) * (
+            *floatVal > 5 ? 0.5f :
+                (
+                    *floatVal > 0.5f ? 0.05f : (*floatVal > 0.05f ? 0.005f : 0.0001f )
+                )
+            );
     if (*floatVal < 0.0f) {
         *floatVal = 0.0f;
     }

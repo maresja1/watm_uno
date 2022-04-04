@@ -32,13 +32,13 @@ void stateUpdate_readButtons_cb();
 void effect_processSettings_cb();
 
 #define USE_SIMULATION 1
-const float simulationSpeed = 10.0f;
+const float simulationSpeed = 1.0f;
 
 Scheduler runner;
 //Tasks
 // periodic task to read state of buttons - might enable other tasks, if needed
 Task t_stateUpdate_readButtons(1e2, -1, &stateUpdate_readButtons_cb, &runner);
-// one-shot task to compute desired gate angle and relay status - enabled if status changes require recalculation
+// one-shot task to compute desired vent angle and relay status - enabled if status changes require recalculation
 Task t_stateUpdate_angleAndRelay(uint64_t(1e3 / simulationSpeed), 1, &stateUpdate_angleAndRelay_cb, &runner);
 // periodic task to read sensors - temperatures, might enable other tasks
 Task t_stateUpdate_readSensors(uint64_t(2e3 / simulationSpeed), -1, &stateUpdate_readSensors_cb, &runner);
@@ -48,7 +48,7 @@ Task t_stateUpdate_hotWaterProbe(uint64_t(1e4 / simulationSpeed), -1, &stateUpda
 Task t_stateUpdate_heatNeeded(uint64_t(1e4 / simulationSpeed), -1, &stateUpdate_heatNeeded_cb, &runner);
 // periodic task to update state based on instructions from the Serial port
 Task t_stateUpdate_serialReader(uint64_t(1e3 / simulationSpeed), -1, &stateUpdate_serialReader_cb, &runner);
-// one-shot effect task to update desired settings of the gate angle and circuit relay - triggered by other tasks
+// one-shot effect task to update desired settings of the vent angle and circuit relay - triggered by other tasks
 Task t_effect_refreshServoAndRelay(uint64_t(6e3 / simulationSpeed), 1, &effect_refreshServoAndRelay_cb, &runner);
 // one-shot effect task to print current status to LCD - triggered by other tasks when smth. changes
 Task t_effect_printStatus(1e3, 1, &effect_printStatus_cb, &runner);
@@ -68,10 +68,10 @@ OneWire oneWire_TempBoiler(DT_BOILER_PIN);
 DallasTemperature dtTempBoiler(&oneWire_TempBoiler);
 #endif
 
-// servo allowing air to come in the boiler (attached to the gate)
+// servo allowing air to come in the boiler (attached to the vent)
 Servo servo;
 
-const uint8_t relayWindowFragments = 10;
+const uint8_t relayWindowFragments = 30;
 
 Configuration config = {
     .refTempBoiler = 70,
@@ -88,13 +88,14 @@ Configuration config = {
     .deltaTempPoly0 = 0.0f, //1.612f,
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
-    .pidKp = 1.0f,
-    .pidKi = 0.2f,
-    .pidKd = 0.2f,
+    // following params were for sim x10 without rescaling
+    .pidKp = 0.8f,
+    .pidKi = 0.01f,
+    .pidKd = 0.04f,
     // K_u = 0.5 (maybe less), T_u = 800s
-    .pidRelayKp = 0.5f,
-    .pidRelayKi = 0.05f,
-    .pidRelayKd = 0.1f,
+    .pidRelayKp = 12.0f,
+    .pidRelayKi = 0.0001f,
+    .pidRelayKd = 1.60f,
 };
 
 char buffer[MAX_BUFFER_LEN];
@@ -412,7 +413,7 @@ void stateUpdate_angleAndRelay_cb()
     circuitRelay = (!underheating && (heatNeeded || overheating)) || hotWaterProbeEnforced;
 
     uint8_t lastAngle = angle;
-    if (settingsSelected == MENU_POS_GATE_MANUAL) {
+    if (settingsSelected == MENU_POS_VENT_MANUAL) {
         // setting is manual, make no changes
     } else if (settingsSelected == MENU_POS_SERVO_MIN) {
         angle = 0;
@@ -535,7 +536,7 @@ void stateUpdate_serialReader_cb()
     DEBUG_SER_PRINT(boilerTemp);
     DEBUG_SER_PRINT(currAngle);
     DEBUG_SER_PRINT(heatNeeded);
-    DEBUG_SER_PRINT_LN(pidRelayAtStartOfWindow);
+    DEBUG_SER_PRINT_LN(pidRelayOut);
 
     if (Serial.available() > 0) {
         size_t read = Serial.readBytesUntil('\n', buffer, MAX_BUFFER_LEN - 1);
@@ -550,7 +551,7 @@ void stateUpdate_serialReader_cb()
                 screenSaverWakeup();
             } else if (commandBuffer.startsWith("O:")) {
                 const String &valueBuffer = commandBuffer.substring(2);
-                settingsSelected = MENU_POS_GATE_MANUAL;
+                settingsSelected = MENU_POS_VENT_MANUAL;
                 angle = strtol(valueBuffer.c_str(), nullptr, 10);
                 notifySettingsChanged();
                 screenSaverWakeup();
@@ -580,10 +581,11 @@ void effect_processSettings_cb()
 #endif
     eepromUpdate();
     pidRelay.SetMode(settingsSelected == MENU_POS_HEAT_MANUAL ? QuickPID::Control::manual : QuickPID::Control::timer);
+    pidBoiler.SetMode(settingsSelected == MENU_POS_VENT_MANUAL ? QuickPID::Control::manual : QuickPID::Control::timer);
     pidBoilerSet = config.refTempBoiler;
     pidRelaySet = config.refTempRoom;
-    pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
-    pidRelay.SetTunings(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
+    pidBoiler.SetTunings(config.pidKp, config.pidKi * simulationSpeed, config.pidKd * simulationSpeed);
+    pidRelay.SetTunings(config.pidRelayKp, config.pidRelayKi * simulationSpeed, config.pidRelayKd * simulationSpeed);
 #if PRINT_SERIAL_UPDATES
     Serial.print(F("DRQ:R:"));
     Serial.println(String(relay_or_override()));
@@ -781,8 +783,7 @@ bool processSettings()
     return stateChanged;
 }
 
-
-#define EEPROM_MAGIC 0xDEADBE01
+#define EEPROM_MAGIC 0xDEADBE00
 
 void eepromInit()
 {

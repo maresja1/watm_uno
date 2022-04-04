@@ -30,7 +30,12 @@ void menuFormatterFloatValue(__attribute__((unused)) void *param, Print &print, 
 {
     lcd.cursor();
     print.print("value: ");
-    snprintf(buffer, MAX_BUFFER_LEN, "%8.3f", (double)*(float*)value);
+    double doubleValue = (double) *(float *) value;
+    if (doubleValue >= 1.0f || doubleValue <= -1.0f) {
+        snprintf(buffer, MAX_BUFFER_LEN, "%8.3f", doubleValue);
+    } else {
+        snprintf(buffer, MAX_BUFFER_LEN, "%8.4f", doubleValue);
+    }
     print.print(buffer);
     buffer[0] = '\0';
 }
