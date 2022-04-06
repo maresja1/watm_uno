@@ -522,6 +522,18 @@ void effect_processSettings_cb()
     Serial.println(config.refTempBoiler);
     Serial.print(F("DRQ:SET:"));
     Serial.println(settingsSelected);
+    Serial.print(F("DRQ:PID_BL_Kp:"));
+    Serial.println(config.pidKp);
+    Serial.print(F("DRQ:PID_BL_Ki:"));
+    Serial.println(config.pidKi);
+    Serial.print(F("DRQ:PID_BL_Kd:"));
+    Serial.println(config.pidKd);
+    Serial.print(F("DRQ:PID_CR_Kp:"));
+    Serial.println(config.pidRelayKp);
+    Serial.print(F("DRQ:PID_CR_Ki:"));
+    Serial.println(config.pidRelayKi);
+    Serial.print(F("DRQ:PID_CR_Kd:"));
+    Serial.println(config.pidRelayKd);
 #endif
 }
 
