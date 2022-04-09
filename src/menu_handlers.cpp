@@ -15,16 +15,16 @@ const struct ConfigMenuItem *getMenu(int16_t itemIndex)
 
 void *menuHandlerVent(__attribute__((unused)) void *param, int8_t diff)
 {
-    angle += diff;
+    angle += diff * 5;
     if (angle < 0 || angle > 200 /* overflow */) {
         angle = 0;
     }
     if (angle >= 100) {
         angle = 99;
     }
-//    if (diff != 0 && angle != 99 && angle % 5 != 0) {
-//        angle = (angle / 5) * 5;
-//    }
+    if (diff != 0 && angle != 99 && angle % 5 != 0) {
+        angle = (angle / 5) * 5;
+    }
     currAngle = angle;
     return &angle;
 }

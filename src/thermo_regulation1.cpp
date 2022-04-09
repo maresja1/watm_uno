@@ -17,7 +17,7 @@
 #include <DallasTemperature.h>
 #endif
 
-#define USE_SIMULATION 1
+#define USE_SIMULATION 0
 const float simulationSpeed = 1.0f;
 
 Scheduler runner;
@@ -86,9 +86,9 @@ Configuration config = {
 
 char buffer[MAX_BUFFER_LEN];
 
-uint8_t angle = 11;
-uint8_t currAngle = 11;
-int16_t settingsSelected = -1;
+uint8_t angle = 50;
+uint8_t currAngle = 50;
+int16_t settingsSelected = 0;
 int16_t settingsSelectedPrint = -1;
 float boilerTemp = 50.0f;
 float roomTemp = 20.0f;
@@ -120,6 +120,8 @@ float pidRelaySet = 0, pidRelayIn = 0, pidRelayOut = 0;
 QuickPID pidRelay(&pidRelayIn, &pidRelayOut, &pidRelaySet);
 
 uint8_t deviceAddress;
+
+const float boilerPidOutOffset = -50.0f;
 
 void setup()
 {
@@ -162,7 +164,7 @@ void setup()
     dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
 #endif
 
-    pidBoiler.SetOutputLimits(0.0f, 99.0f);
+    pidBoiler.SetOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
     pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
     pidBoiler.SetMode(QuickPID::Control::timer);
 
@@ -221,7 +223,7 @@ const int16_t circuitVolume = int16_t(radiatorCount * 5.8f);
 
 float circuitTemp = 40;
 
-unsigned long lastSimulate = UINT64_MAX;
+uint64_t lastSimulate = UINT64_MAX;
 void stateUpdate_simulator_cb()
 {
     if (lastSimulate > millis()) {
@@ -402,7 +404,7 @@ void stateUpdate_angleAndRelay_cb()
     } else if (settingsSelected == MENU_POS_SERVO_MAX) {
         angle = 99;
     } else {
-        angle = pidBoilerOut;
+        angle = max(min((pidBoilerOut - boilerPidOutOffset), 99), 0);
 
 //        for (int i = config.curveItems - 1; i >= 0; i--) {
 //            if (boilerDelta >= maxDeltaSettings[i]) {
