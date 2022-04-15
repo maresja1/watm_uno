@@ -62,7 +62,7 @@ void stateUpdate_serialReader_cb()
                 notifySettingsChanged();
                 screenSaverWakeup();
             OR_PARSE(CMD_VENT_SET)
-                settingsSelected = MENU_POS_VENT_MANUAL;
+                config.settingsSelected = MENU_POS_VENT_MANUAL;
                 angle = strtol(valueBuffer.c_str(), nullptr, 10);
                 notifySettingsChanged();
                 screenSaverWakeup();
@@ -88,10 +88,8 @@ void stateUpdate_serialReader_cb()
                 config.pidRelayKd = strtod(valueBuffer.c_str(), nullptr);
                 notifySettingsChanged();
             OR_PARSE(CMD_MODE)
-                Serial.print("XX");
-                Serial.println(sBuffer);
                 if (valueBuffer.equals("A")) {
-                    settingsSelected = -1;
+                    config.settingsSelected = -1;
                     heatNeededOverride = 0;
                     notifySettingsChanged();
                     screenSaverWakeup();

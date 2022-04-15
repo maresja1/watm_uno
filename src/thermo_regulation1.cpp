@@ -60,9 +60,9 @@ Servo servo;
 const uint8_t relayWindowFragments = 30;
 
 Configuration config = {
-    .refTempBoiler = 70,
+    .refTempBoiler = 55,
     .refTempBoilerIdle = 50,
-    .refTempRoom = 22.0f,
+    .refTempRoom = 21.0f,
     .circuitRelayForced = 0,  // 0 no override, 1 - override false, 2 or else - override true
     .servoMin = 0,
     .servoMax = 180,
@@ -70,26 +70,26 @@ Configuration config = {
     .underheatingLimit = 45,
     .overheatingLimit = 80,
     // least squares of (1,2), (20,6), (44,12) - y = 0.2333x + 1.612
-    .deltaTempPoly1 = 0.0f, //0.2333f,
+    .deltaTempPoly1 = 0.240f, //0.2333f,
     .deltaTempPoly0 = 0.0f, //1.612f,
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
     // following params were for sim x10 without rescaling
-    .pidKp = 0.8f,
+    .pidKp = 4.0f,
     .pidKi = 0.01f,
     .pidKd = 0.04f,
     // K_u = 0.5 (maybe less), T_u = 800s
     .pidRelayKp = 12.0f,
     .pidRelayKi = 0.0001f,
     .pidRelayKd = 1.60f,
+    .settingsSelected = -1
 };
 
 char buffer[MAX_BUFFER_LEN];
 
 uint8_t angle = 50;
 uint8_t currAngle = 50;
-int16_t settingsSelected = 0;
-int16_t settingsSelectedPrint = -1;
+int16_t settingsSelectedPrint = -2;
 float boilerTemp = 50.0f;
 float roomTemp = 20.0f;
 float roomHumidity = 0.0f;
@@ -213,6 +213,7 @@ float simulate_radiatorPower(float deltaTemp)
     return max(0.0f, (0.264f * deltaTemp * deltaTemp) + 20.38 * deltaTemp);
 }
 
+#if USE_SIMULATION
 const int8_t radiatorCount = 10;
 const int8_t boilerVolume = 36;
 const uint32_t boilerPower = 18000;
@@ -256,6 +257,7 @@ void stateUpdate_simulator_cb()
 
     lastSimulate = millis();
 }
+#endif
 
 uint8_t heatNeededCurrentFragment = relayWindowFragments * 0.8f;
 uint8_t pidRelayAtStartOfWindow = 0;
@@ -287,7 +289,7 @@ void stateUpdate_heatNeeded_cb()
 
 void stateUpdate_hotWaterProbe_cb()
 {
-    if (settingsSelected != -1) {
+    if (config.settingsSelected != -1) {
         return; // hot water probe disabled in settings
     }
     hotWaterProbeCycles++;
@@ -397,11 +399,11 @@ void stateUpdate_angleAndRelay_cb()
     circuitRelay = (!underheating && (heatNeeded || overheating)) || hotWaterProbeEnforced;
 
     uint8_t lastAngle = angle;
-    if (settingsSelected == MENU_POS_VENT_MANUAL) {
+    if (config.settingsSelected == MENU_POS_VENT_MANUAL) {
         // setting is manual, make no changes
-    } else if (settingsSelected == MENU_POS_SERVO_MIN) {
+    } else if (config.settingsSelected == MENU_POS_SERVO_MIN) {
         angle = 0;
-    } else if (settingsSelected == MENU_POS_SERVO_MAX) {
+    } else if (config.settingsSelected == MENU_POS_SERVO_MAX) {
         angle = 99;
     } else {
         angle = max(min((pidBoilerOut - boilerPidOutOffset), 99), 0);
@@ -428,8 +430,8 @@ void stateUpdate_angleAndRelay_cb()
     }
 
     if (
-            settingsSelected != MENU_POS_SERVO_MIN &&
-            settingsSelected != MENU_POS_SERVO_MAX &&
+            config.settingsSelected != MENU_POS_SERVO_MIN &&
+            config.settingsSelected != MENU_POS_SERVO_MAX &&
             (lastAngle != angle || lastCircuitRelay != circuitRelay)
     ) {
         notifyTask(&t_effect_refreshServoAndRelay, false);
@@ -509,8 +511,8 @@ void effect_processSettings_cb()
     DEBUG_TASK_ENTRY("stateUpdate_readButtons");
 #endif
     eepromUpdate();
-    pidRelay.SetMode(settingsSelected == MENU_POS_HEAT_MANUAL ? QuickPID::Control::manual : QuickPID::Control::timer);
-    pidBoiler.SetMode(settingsSelected == MENU_POS_VENT_MANUAL ? QuickPID::Control::manual : QuickPID::Control::timer);
+    pidRelay.SetMode(config.settingsSelected == MENU_POS_HEAT_MANUAL ? QuickPID::Control::manual : QuickPID::Control::timer);
+    pidBoiler.SetMode(config.settingsSelected == MENU_POS_VENT_MANUAL ? QuickPID::Control::manual : QuickPID::Control::timer);
     pidBoilerSet = config.refTempBoiler;
     pidRelaySet = config.refTempRoom;
     pidBoiler.SetTunings(config.pidKp, config.pidKi * simulationSpeed, config.pidKd * simulationSpeed);
@@ -523,7 +525,7 @@ void effect_processSettings_cb()
     Serial.print(F("DRQ:BRT:"));
     Serial.println(config.refTempBoiler);
     Serial.print(F("DRQ:SET:"));
-    Serial.println(settingsSelected);
+    Serial.println(config.settingsSelected);
     Serial.print(F("DRQ:PID_BL_Kp:"));
     Serial.println(config.pidKp);
     Serial.print(F("DRQ:PID_BL_Ki:"));
@@ -601,7 +603,7 @@ void servoSetPos(int positionPercent)
 void printSettings()
 {
     lcd.noCursor();
-    const ConfigMenuItem_t *currentItem = getMenu(settingsSelected);
+    const ConfigMenuItem_t *currentItem = getMenu(config.settingsSelected);
 
     lcd.setCursor(0, 0);
     lcd.print(currentItem->name);
@@ -658,15 +660,15 @@ void printStatusOverview()
 
 void printStatus()
 {
-    if (settingsSelected != settingsSelectedPrint) {
+    if (config.settingsSelected != settingsSelectedPrint) {
         lcd.clear();
     }
-    if (settingsSelected >= 0) {
+    if (config.settingsSelected >= 0) {
         printSettings();
     } else {
         printStatusOverview();
     }
-    settingsSelectedPrint = settingsSelected;
+    settingsSelectedPrint = config.settingsSelected;
 }
 
 #define MAX_MENU_ITEMS MENU_STATIC_ITEMS // (MENU_STATIC_ITEMS + (config.curveItems * 2) + 1)
@@ -676,21 +678,21 @@ bool processSettings()
     bool stateChanged = false;
     if (readButton(&btn1) == 1) {
         stateChanged = true;
-        settingsSelected = settingsSelected - 1;
-        if (settingsSelected == -2) {
-            settingsSelected = MAX_MENU_ITEMS - 2;
+        config.settingsSelected = config.settingsSelected - 1;
+        if (config.settingsSelected == -2) {
+            config.settingsSelected = MAX_MENU_ITEMS - 2;
         }
     }
     if (readButton(&btn2) == 1) {
         stateChanged = true;
-        settingsSelected = settingsSelected + 1;
-        if (settingsSelected == MAX_MENU_ITEMS - 1) {
-            settingsSelected = -1;
+        config.settingsSelected = config.settingsSelected + 1;
+        if (config.settingsSelected == MAX_MENU_ITEMS - 1) {
+            config.settingsSelected = -1;
         }
     }
     bool anyPressed;
-    if (settingsSelected >= 0) {
-        const ConfigMenuItem_t *currentItem = getMenu(settingsSelected);
+    if (config.settingsSelected >= 0) {
+        const ConfigMenuItem_t *currentItem = getMenu(config.settingsSelected);
         if (readButton(&btn3) == 1) {
             stateChanged = true;
             currentItem->handler(currentItem->param, -1);
@@ -733,13 +735,17 @@ void eepromInit()
     uint32_t checkCode;
     EEPROM.get(0, checkCode);
     if (checkCode == EEPROM_MAGIC) {
-        int offset = sizeof(checkCode);
-        EEPROM.get(offset, config);
-        offset += sizeof(config);
-//        EEPROM.get(offset, maxDeltaSettings);
-//        offset += sizeof(maxDeltaSettings);
-//        EEPROM.get(offset, maxDeltaHigh);
-    } else {
+        EEPROM.get(sizeof(checkCode), config);
+		if (config.settingsSelected < -1) {
+			config.settingsSelected = -1;
+		} else if (config.settingsSelected > MAX_MENU_ITEMS) {
+			config.settingsSelected = -1;
+		}
+	// migration
+//    } else if (checkCode == 0xDEADBE00) {
+//        EEPROM.get(sizeof(checkCode), config);
+//        config.settingsSelected = -1;
+	} else {
         eepromUpdate();
     }
 }

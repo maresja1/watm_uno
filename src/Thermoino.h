@@ -80,12 +80,12 @@ struct Configuration {
     float pidRelayKp;
     float pidRelayKi;
     float pidRelayKd;
+    int16_t settingsSelected;
 };
 
 extern Configuration config;
 extern uint8_t angle;
 extern uint8_t currAngle;
-extern int16_t settingsSelected;
 extern int16_t settingsSelectedPrint;
 extern float boilerTemp;
 extern float roomTemp;
