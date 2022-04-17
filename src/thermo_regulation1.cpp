@@ -17,7 +17,7 @@
 #include <DallasTemperature.h>
 #endif
 
-#define USE_SIMULATION 0
+#define USE_SIMULATION 1
 const float simulationSpeed = 1.0f;
 
 Scheduler runner;
@@ -210,21 +210,22 @@ float simulate_radiatorPower(float deltaTemp)
 //    int16_t radiatorSlopeBase = radiatorPowerDT30 - (30 * radiatorSlope);
 
     // polynomial interpolation
-    return max(0.0f, (0.264f * deltaTemp * deltaTemp) + 20.38 * deltaTemp);
+    return max(0.0f, (0.264f * deltaTemp * deltaTemp) + 20.38f * deltaTemp);
 }
 
 #if USE_SIMULATION
 const int8_t radiatorCount = 10;
 const int8_t boilerVolume = 36;
 const uint32_t boilerPower = 18000;
-#define waterHeatCapacity 4180
+#define waterHeatCapacity 4180.0f
 const uint32_t heatedAirOtherCapacity = 2000000;
 const int8_t outsideTemp = 10;
-const int16_t circuitVolume = int16_t(radiatorCount * 5.8f);
+const int16_t circuitVolume = int16_t(float(radiatorCount) * 5.8f);
 
 float circuitTemp = 40;
 
 uint64_t lastSimulate = UINT64_MAX;
+float lastPower = 0.0f;
 void stateUpdate_simulator_cb()
 {
     if (lastSimulate > millis()) {
@@ -239,16 +240,20 @@ void stateUpdate_simulator_cb()
     const float boilerAsRadiator = simulate_radiatorPower(boilerTemp - roomTemp) * 2;
     const float roomHeat = circuitPower + boilerAsRadiator - insulationLost;
 
-    const float boilerPowerAngle = float(boilerPower * currAngle) / 100;
-
-    boilerTemp += (
-            ((boilerPowerAngle - boilerAsRadiator) * dTime) /
-            (float(boilerVolume) * float(waterHeatCapacity))
+    const float boilerPowerAngle = min(
+        max(lastPower - 1000.0f, float(boilerPower * currAngle) / 100),
+        lastPower + 1000.0f
     );
+    lastPower = boilerPowerAngle;
+
+    const float boilerDelta =  ((boilerPowerAngle - boilerAsRadiator) * dTime) /
+            (float(boilerVolume) * waterHeatCapacity);
+
+    boilerTemp += boilerDelta;
 
     if (circuitRelay) {
         const float conduct = (boilerTemp - circuitTemp) * waterHeatCapacity * 2.639f * 0.2f; // 2.63 is dm^3*s^-1 of the circuit relay
-        boilerTemp -= float(double(conduct * dTime) / (double(circuitVolume) * waterHeatCapacity));
+        boilerTemp -= float(double(conduct * dTime) / (double(boilerVolume) * waterHeatCapacity));
         circuitTemp += float(double(conduct * dTime) / (double(circuitVolume) * waterHeatCapacity));
     }
 
@@ -256,6 +261,17 @@ void stateUpdate_simulator_cb()
     circuitTemp -= float(double(circuitPower * dTime) / (double(circuitVolume) * waterHeatCapacity));
 
     lastSimulate = millis();
+
+#if 0
+    DEBUG_SER_PRINT(circuitTemp);
+    DEBUG_SER_PRINT(dTime);
+    DEBUG_SER_PRINT(boilerDelta);
+    DEBUG_SER_PRINT(roomTemp);
+    DEBUG_SER_PRINT(boilerTemp);
+    DEBUG_SER_PRINT(currAngle);
+    DEBUG_SER_PRINT(heatNeeded);
+    DEBUG_SER_PRINT_LN(pidRelayOut);
+#endif
 }
 #endif
 
@@ -336,14 +352,15 @@ void stateUpdate_readSensors_cb()
 #else
         boilerTemp = readTemp(BOILER_THERM_PIN);
 #endif
-#else
-    stateUpdate_simulator_cb();
-#endif
 
     // roomTemp is not NaN
     if (roomTemp == roomTemp) {
         boilerTemp += (config.deltaTempPoly1 * (boilerTemp - roomTemp)) + config.deltaTempPoly0;
     }
+
+#else
+    stateUpdate_simulator_cb();
+#endif
 
     pidBoilerIn = boilerTemp;
     pidRelayIn = roomTemp;

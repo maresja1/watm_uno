@@ -29,14 +29,6 @@ void serialLineBufferLoop() {
 
 void stateUpdate_serialReader_cb()
 {
-#if 0
-    DEBUG_SER_PRINT(circuitTemp);
-    DEBUG_SER_PRINT(roomTemp);
-    DEBUG_SER_PRINT(boilerTemp);
-    DEBUG_SER_PRINT(currAngle);
-    DEBUG_SER_PRINT(heatNeeded);
-    DEBUG_SER_PRINT_LN(pidRelayOut);
-#endif
 
 #define CMD_HNO "HNO"
 #define CMD_VENT_SET "O"
