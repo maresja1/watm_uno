@@ -10,6 +10,7 @@
 
 #include <TaskScheduler.h>
 #include <LiquidCrystal_I2C.h>
+#include "pid.h"
 
 #define DEBUG_LEVEL 0
 #define DT_BOILER_PIN 11
@@ -20,8 +21,6 @@
 #define BTN_2_PIN 7
 #define BTN_3_PIN 4
 #define BTN_4_PIN 5
-#define BOILER_THERM_PIN A0
-#define ROOM_THERM_PIN A1
 
 #define USE_DHT_ROOM_TEMP 1
 #define USE_DT_ROOM_BOILER 1
@@ -101,17 +100,17 @@ extern bool circuitRelay;
 extern Task t_stateUpdate_readButtons;
 extern Task t_stateUpdate_angleAndRelay;
 extern Task t_stateUpdate_readSensors;
-extern Task t_stateUpdate_hotWaterProbe;
+//extern Task t_stateUpdate_hotWaterProbe;
 extern Task t_stateUpdate_heatNeeded;
 extern Task t_stateUpdate_serialReader;
 extern Task t_effect_refreshServoAndRelay;
 extern Task t_effect_printStatus;
 extern Task t_effect_processSettings;
 
-extern float pidRelaySet;
-extern float pidRelayIn;
-extern float pidRelayOut;
 extern LiquidCrystal_I2C lcd;
+
+extern ThermoinoPID pidBoiler;
+extern ThermoinoPID pidRelay;
 
 typedef struct Button {
     uint8_t pin;
@@ -131,7 +130,7 @@ void notifySettingsChanged();
 void stateUpdate_heatNeeded_cb();
 void stateUpdate_simulator_cb();
 void stateUpdate_serialReader_cb();
-void stateUpdate_hotWaterProbe_cb();
+//void stateUpdate_hotWaterProbe_cb();
 void stateUpdate_readSensors_cb();
 void effect_refreshServoAndRelay_cb();
 void effect_printStatus_cb();

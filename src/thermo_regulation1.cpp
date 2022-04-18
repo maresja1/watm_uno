@@ -91,8 +91,7 @@ uint8_t angle = 50;
 uint8_t currAngle = 50;
 int16_t settingsSelectedPrint = -2;
 float boilerTemp = 50.0f;
-float roomTemp = 10.0f;
-float roomHumidity = 0.0f;
+float roomTemp = 20.0f;
 bool heatNeeded = false;
 uint8_t heatNeededOverride = 0; // 0 no override, 1 - override false, 2 or else - override true
 bool overheating = false;
@@ -107,13 +106,10 @@ bool hotWaterProbeHadRelayOn = false;
 bool hotWaterProbeEnforced = false;
 //uint8_t hotWaterProbeCycles = 0;
 
-float pidBoilerOut = 0;
 // K_u = 100 (maybe less), T_u = 30s (pretty stable)
 ThermoinoPID pidBoiler(t_stateUpdate_readSensors.getInterval());
 //sTune tuner(&pidBoilerIn, &pidBoilerOut, sTune::NoOvershoot_PID, sTune::directIP, sTune::printOFF);
 
-
-float pidRelayOut = 0;
 // K_u = 0.5f, T_u = 280s
 ThermoinoPID pidRelay(t_stateUpdate_readSensors.getInterval());
 
@@ -157,12 +153,13 @@ void setup()
     dtTempBoiler.requestTemperaturesByAddress(&deviceAddress);
 #endif
 
-    pidBoiler.SetOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
-    pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
+    pidBoiler.setOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
+    pidBoiler.setParams(config.pidKp, config.pidKi, config.pidKd);
+    pidRelay.setIntegralMaxError(3.0f);
 
-    pidRelay.SetTunings(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
-    pidRelay.SetOutputLimits(0.0f, float(relayWindowFragments));
-//    pidRelay.SetMode(QuickPID::Control::timer);
+    pidRelay.setOutputLimits(0.0f, float(relayWindowFragments));
+    pidRelay.setParams(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
+    pidRelay.setIntegralMaxError(1.5f);
 
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
@@ -275,7 +272,7 @@ void stateUpdate_heatNeeded_cb()
     heatNeededCurrentFragment++;
     if (heatNeededCurrentFragment >= relayWindowFragments) {
         heatNeededCurrentFragment = 0;
-        pidRelayAtStartOfWindow = lround(double(pidRelayOut));
+        pidRelayAtStartOfWindow = lround(double(pidRelay.getConstraintedValue()));
 #if PRINT_SERIAL_UPDATES
         Serial.print(F("DRQ:HPWM:"));
         Serial.println(pidRelayAtStartOfWindow);
@@ -370,10 +367,10 @@ void stateUpdate_readSensors_cb()
 //            break;
 //    }
     if (config.settingsSelected != MENU_POS_VENT_MANUAL) {
-        pidBoilerOut = pidBoiler.Compute(boilerTemp, (float)config.refTempBoiler);
+        pidBoiler.compute(boilerTemp, (float)config.refTempBoiler);
     }
     if (!underheating && config.settingsSelected != MENU_POS_HEAT_MANUAL) {
-        pidRelayOut = pidRelay.Compute(roomTemp, (float) config.refTempRoom);
+        pidRelay.compute(roomTemp, (float) config.refTempRoom);
     }
 
     if((boilerTemp != lastBoilerTemp) || (roomTemp != lastRoomTemp)) {
@@ -391,6 +388,8 @@ void stateUpdate_readSensors_cb()
     DEBUG_TASK_RET("stateUpdate_readSensors");
 #endif
 }
+
+uint8_t getVentAngleFromPID();
 
 void stateUpdate_angleAndRelay_cb()
 {
@@ -416,27 +415,7 @@ void stateUpdate_angleAndRelay_cb()
     } else if (config.settingsSelected == MENU_POS_SERVO_MAX) {
         angle = 99;
     } else {
-        angle = max(min((pidBoilerOut - boilerPidOutOffset), 99), 0);
-
-//        for (int i = config.curveItems - 1; i >= 0; i--) {
-//            if (boilerDelta >= maxDeltaSettings[i]) {
-//                int nextAngle = maxDeltaHigh[i];
-//                int nextI = i + 1;
-//                if (nextI < config.curveItems) {
-//                    // linear interpolation
-//                    nextAngle = float(maxDeltaHigh[i]) +
-//                                (
-//                                        (boilerDelta - float(maxDeltaSettings[i])) *
-//                                        (
-//                                                float(maxDeltaHigh[nextI] - maxDeltaHigh[i]) /
-//                                                float(maxDeltaSettings[nextI] - maxDeltaSettings[i])
-//                                        )
-//                                );
-//                }
-//                angle = nextAngle;
-//                break;
-//            }
-//        }
+        angle = getVentAngleFromPID();
     }
 
     if (
@@ -456,6 +435,11 @@ void stateUpdate_angleAndRelay_cb()
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_RET("stateUpdate_angleAndRelay");
 #endif
+}
+
+uint8_t getVentAngleFromPID() {
+    const float feedForward = circuitRelay ? 1.0f : 0.8f;
+    return max(min(int((*pidBoiler.valPtr() - boilerPidOutOffset) * feedForward), 99), 0);
 }
 
 void effect_refreshServoAndRelay_cb()
@@ -519,8 +503,8 @@ void effect_processSettings_cb()
     DEBUG_TASK_ENTRY("stateUpdate_readButtons");
 #endif
     eepromUpdate();
-    pidBoiler.SetTunings(config.pidKp, config.pidKi * simulationSpeed, config.pidKd * simulationSpeed);
-    pidRelay.SetTunings(config.pidRelayKp, config.pidRelayKi * simulationSpeed, config.pidRelayKd * simulationSpeed);
+    pidBoiler.setParams(config.pidKp, config.pidKi * simulationSpeed, config.pidKd * simulationSpeed);
+    pidRelay.setParams(config.pidRelayKp, config.pidRelayKi * simulationSpeed, config.pidRelayKd * simulationSpeed);
 #if PRINT_SERIAL_UPDATES
     serialPrintConfig();
 #endif

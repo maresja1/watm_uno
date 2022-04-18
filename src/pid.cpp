@@ -5,29 +5,20 @@
 #include <Arduino.h>
 #include "pid.h"
 
-
-/* Constructor ********************************************************************
-   The parameters specified here are those for for which we can't set up
-   reliable defaults, so we need to have the user set them.
- **********************************************************************************/
 ThermoinoPID::ThermoinoPID(uint32_t period)
 {
     this->error = 0;
     this->lastError = 0;
     this->lastOutput = 0;
     this->period = period;
+    this->noIntOffset = __FLT_MAX__;
 
-    this->A0 = this->A1 = this->A2 = 0;
+    this->A0 = this->A0_noint = this->A1 = this->A2 = 0;
 
-    ThermoinoPID::SetOutputLimits(0, 100);
+    ThermoinoPID::setOutputLimits(0, 100);
 }
 
-/* Compute() ***********************************************************************
-   This function should be called every time "void loop()" executes. The function
-   will decide whether a new PID Output needs to be computed. Returns true
-   when the output is computed, false when nothing has been done.
- **********************************************************************************/
-float ThermoinoPID::Compute(const float input, const float setPoint) {
+void ThermoinoPID::compute(const float input, const float setPoint) {
     // taken from https://en.wikipedia.org/wiki/PID_controller#Discrete_implementation
 //    A0 := Kp + Ki*dt + Kd/dt
 //    A1 := -Kp - 2*Kd/dt
@@ -47,28 +38,40 @@ float ThermoinoPID::Compute(const float input, const float setPoint) {
     const float errorBeforeLast = lastError;
     lastError = error;
     error = setPoint - input;
-    lastOutput += (A0 * error) + (A1 * lastError) + (A2 * errorBeforeLast);
+    if (abs(error) < this->noIntOffset) {
+        lastOutput += (A0 * error) + (A1 * lastError) + (A2 * errorBeforeLast);
+    } else {
+        lastOutput += (A0_noint * error) + (A1 * lastError) + (A2 * errorBeforeLast);
+    }
+}
+
+float ThermoinoPID::getConstraintedValue() {
     // consider limiting lastOutput to avoid windup
     return constrain(lastOutput, outMin, outMax);
 }
 
-/* SetTunings(....)************************************************************
-  This function allows the controller's dynamic performance to be adjusted.
-  it's called automatically from the constructor, but tunings can also
-  be adjusted on the fly during normal operation.
-******************************************************************************/
-void ThermoinoPID::SetTunings(float Kp, float Ki, float Kd) {
+float *ThermoinoPID::valPtr() {
+    // consider limiting lastOutput to avoid windup
+    return &lastOutput;
+}
+
+void ThermoinoPID::setParams(float Kp, float Ki, float Kd) {
     // taken from https://en.wikipedia.org/wiki/PID_controller#Discrete_implementation
 //    A0 := Kp + Ki*dt + Kd/dt
 //    A1 := -Kp - 2*Kd/dt
 //    A2 := Kd/dt
-    this->A0 = Kp + (Ki * period) + (Kd / period);
+    this->A0_noint = Kp + (Kd / period);
+    this->A0 = this->A0_noint + (Ki * period);
     this->A1 = -Kp - (2 * ( Kd / period));
     this->A2 = Kd / period;
 }
 
-void ThermoinoPID::SetOutputLimits(float Min, float Max) {
-    if (Min >= Max) return;
-    outMin = Min;
-    outMax = Max;
+void ThermoinoPID::setOutputLimits(float min, float max) {
+    if (min >= max) return;
+    outMin = min;
+    outMax = max;
+}
+
+void ThermoinoPID::setIntegralMaxError(float offset) {
+    this->noIntOffset = offset;
 }

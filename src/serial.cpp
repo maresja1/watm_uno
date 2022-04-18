@@ -5,7 +5,7 @@
 
 #include "Thermoino.h"
 
-#define USE_SOFT_SERIAL 0
+#define USE_SOFT_SERIAL 1
 
 const uint8_t serialLineBufferCapacity = 63;
 uint8_t serialLineBufferIdx = 0;

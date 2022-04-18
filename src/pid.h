@@ -9,31 +9,30 @@
 class ThermoinoPID {
 
 public:
-    // commonly used functions ************************************************************************************
-
-    // Constructor. Links the PID to Input, Output, Setpoint, initial tuning parameters and control modes.
     explicit ThermoinoPID(uint32_t period);
 
-    // Performs the PID calculation. It should be called every time loop() cycles ON/OFF and calculation frequency
-    // can be set using SetMode and SetSampleTime respectively.
-    float Compute(float input, float setPoint);
+    void compute(float input, float setPoint);
 
-    // Sets and clamps the output to a specific range (0-255 by default).
-    void SetOutputLimits(float Min, float Max);
+    float getConstraintedValue();
 
-    // available but not commonly used functions ******************************************************************
+    float *valPtr();
 
-    // While most users will set the tunings once in the constructor, this function gives the user the option of
-    // changing tunings during runtime for Adaptive control.
-    void SetTunings(float Kp, float Ki, float Kd);
+    void setOutputLimits(float min, float max);
+
+    // if abs(error) higher than this, integral part is omitted to avoid windup
+    void setIntegralMaxError(float offset);
+
+    void setParams(float Kp, float Ki, float Kd);
 
 private:
 
-    float error, lastError, outMin, outMax, lastOutput;
+    float error, lastError, outMin, outMax, noIntOffset, lastOutput;
 
-    float A0;           // (P)roportional gain - K_p
-    float A1;           // (I)ntegral time - T_i
-    float A2;           // (D)erivative time T_d
+    float A0;
+    // A0 without integral part - anti-windup
+    float A0_noint;
+    float A1;
+    float A2;
 
     uint32_t period;
 }; // class ThermoinoPID

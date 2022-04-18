@@ -31,14 +31,14 @@ void *menuHandlerVent(__attribute__((unused)) void *param, int8_t diff)
 
 void *menuHandlerHeating(__attribute__((unused)) void *param, int8_t diff)
 {
-    pidRelayOut += float(diff);
-    if (pidRelayOut < 0) {
-        pidRelayOut = 0.0f;
+    float *pidRelayOut = pidRelay.valPtr();
+    if (*pidRelayOut < 0) {
+        *pidRelayOut = 0.0f;
     }
-    if (pidRelayOut  > 10) {
-        pidRelayOut = 10.0f;
+    if (*pidRelayOut  > 10) {
+        *pidRelayOut = 10.0f;
     }
-    return &pidRelayOut;
+    return pidRelayOut;
 }
 
 void *menuHandlerBoiler(__attribute__((unused)) void *param, int8_t diff)
