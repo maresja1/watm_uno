@@ -5,24 +5,50 @@
 
 #include "Thermoino.h"
 
+#define USE_SOFT_SERIAL 0
 
-const uint8_t serialLineBufferCapacity = 40;
+const uint8_t serialLineBufferCapacity = 63;
 uint8_t serialLineBufferIdx = 0;
-char serialLineBuffer[serialLineBufferCapacity];   // an array to store the received data
-boolean serialLineBufferDataReady = false;
+char serialLineBuffer[serialLineBufferCapacity + 1] = "";   // an array to store the received data
+uint8_t serialLineBufferDataReady = 0x0;
+
+#if USE_SOFT_SERIAL
+#include <SoftwareSerial.h>
+SoftwareSerial mySerial(13, 12); // RX, TX
+#endif
+
+void serialLineSetup() {
+    Serial.begin(115200);
+
+    for (int i = 0; i < 10 && !Serial; ++i) {
+        // wait for serial port to connect. Needed for native USB port only
+        delay(10);
+    }
+#if USE_SOFT_SERIAL
+    mySerial.begin(9600);
+#endif
+}
 
 void serialLineBufferLoop() {
-    if (Serial.available() > 0 && !serialLineBufferDataReady) {
-        const char rc = (char) Serial.read();
-        if (rc != '\r' && rc != '\n') {
+    while(Serial.available() > 0 && !(serialLineBufferDataReady & 0x1)) {
+        int rc = Serial.read();
+        if (rc < 0) {
+            break;
+        } else if (rc != '\r' && rc != '\n') {
             serialLineBuffer[serialLineBufferIdx++] = rc;
             if (serialLineBufferIdx >= serialLineBufferCapacity) {
                 serialLineBufferIdx = 0; // overflow
+                serialLineBuffer[serialLineBufferCapacity] = 0x0;
+                serialLineBufferDataReady |= 0x2;
             }
         } else {
+            if (serialLineBufferIdx == 0) {
+                // ignore empty lines
+                continue;
+            }
             serialLineBuffer[serialLineBufferIdx] = '\0'; // terminate the string
             serialLineBufferIdx = 0;
-            serialLineBufferDataReady = true;
+            serialLineBufferDataReady |= 0x1;
         }
     }
 }
@@ -40,13 +66,23 @@ void stateUpdate_serialReader_cb()
 #define CMD_PID_CR_Ki "PID_CR_Ki"
 #define CMD_PID_CR_Kd "PID_CR_Kd"
 #define CMD_MODE "M"
+#define CMD_INTERNAL "INT"
 #define literal_len(x) (sizeof(x) - 1)
 #define PARSE(x) if (commandBuffer.startsWith(F(x ":"))) { const String &valueBuffer = commandBuffer.substring(literal_len(x ":"));
 #define OR_PARSE(x) } else if (commandBuffer.startsWith(F(x ":"))) { const String &valueBuffer = commandBuffer.substring(literal_len(x ":"));
 
-    if (serialLineBufferDataReady) {
-        serialLineBufferDataReady = false;
+    if (serialLineBufferDataReady & 0x2) {
+        serialLineBufferDataReady = 0x0;
+#if USE_SOFT_SERIAL
+        mySerial.println("serial overflow");
+#endif
+    } else if (serialLineBufferDataReady & 0x1) {
+        serialLineBufferDataReady = 0x0;
         const String &sBuffer = String(serialLineBuffer);
+#if USE_SOFT_SERIAL
+        mySerial.print("got -> ");
+        mySerial.println(sBuffer);
+#endif
         if (sBuffer.startsWith(F("DRQ:"))) {
             const String &commandBuffer = sBuffer.substring(4);
             PARSE(CMD_HNO)
@@ -86,12 +122,39 @@ void stateUpdate_serialReader_cb()
                     notifySettingsChanged();
                     screenSaverWakeup();
                 }
+            OR_PARSE(CMD_INTERNAL)
+                if (valueBuffer.equals("SYNC")) {
+                    serialPrintConfig();
+                }
             } else {
-                Serial.print(F("Unknown command: "));
-                Serial.println(sBuffer);
+                // Serial.print(F("Unknown command: "));
+                // Serial.println(sBuffer);
             }
         }
     }
+}
+
+void serialPrintConfig() {
+    Serial.print(F("DRQ:R:"));
+    Serial.println(String(relay_or_override()));
+    Serial.print(F("DRQ:O:"));
+    Serial.println(angle);
+    Serial.print(F("DRQ:BRT:"));
+    Serial.println(config.refTempBoiler);
+    Serial.print(F("DRQ:SET:"));
+    Serial.println(config.settingsSelected);
+    Serial.print(F("DRQ:PID_BL_Kp:"));
+    Serial.println(config.pidKp, 4);
+    Serial.print(F("DRQ:PID_BL_Ki:"));
+    Serial.println(config.pidKi, 4);
+    Serial.print(F("DRQ:PID_BL_Kd:"));
+    Serial.println(config.pidKd, 4);
+    Serial.print(F("DRQ:PID_CR_Kp:"));
+    Serial.println(config.pidRelayKp, 4);
+    Serial.print(F("DRQ:PID_CR_Ki:"));
+    Serial.println(config.pidRelayKi, 4);
+    Serial.print(F("DRQ:PID_CR_Kd:"));
+    Serial.println(config.pidRelayKd, 4);
 }
 
 void notifySettingsChanged() {

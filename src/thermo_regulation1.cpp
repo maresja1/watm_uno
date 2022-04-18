@@ -1,23 +1,23 @@
 #include <Arduino.h>
-
-#include "Thermoino.h"
-
 #include <EEPROM.h>
-#include <sTune.h>
-#include <QuickPID.h>
-
-#if USE_DHT_ROOM_TEMP
-#include <DHT.h>
-#endif
 #include <Servo.h>
 #include <TaskScheduler.h>
 
-#if USE_DT_ROOM_BOILER
+#include "Thermoino.h"
+#include "pid.h"
+
+#define USE_SIMULATION 1
+
+#if USE_DHT_ROOM_TEMP && !USE_SIMULATION
+#include <DHT.h>
+#endif
+
+
+#if USE_DT_ROOM_BOILER && !USE_SIMULATION
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #endif
 
-#define USE_SIMULATION 1
 const float simulationSpeed = 1.0f;
 
 Scheduler runner;
@@ -29,7 +29,7 @@ Task t_stateUpdate_angleAndRelay(uint64_t(1e3 / simulationSpeed), 1, &stateUpdat
 // periodic task to read sensors - temperatures, might enable other tasks
 Task t_stateUpdate_readSensors(uint64_t(2e3 / simulationSpeed), -1, &stateUpdate_readSensors_cb, &runner);
 // periodic task for hot water probe - allows relay to let some water through once in a while to allow for better measurement
-Task t_stateUpdate_hotWaterProbe(uint64_t(1e4 / simulationSpeed), -1, &stateUpdate_hotWaterProbe_cb, &runner);
+//Task t_stateUpdate_hotWaterProbe(uint64_t(1e4 / simulationSpeed), -1, &stateUpdate_hotWaterProbe_cb, &runner);
 // periodic task for PID heat control
 Task t_stateUpdate_heatNeeded(uint64_t(1e4 / simulationSpeed), -1, &stateUpdate_heatNeeded_cb, &runner);
 // periodic task to update state based on instructions from the Serial port
@@ -91,7 +91,7 @@ uint8_t angle = 50;
 uint8_t currAngle = 50;
 int16_t settingsSelectedPrint = -2;
 float boilerTemp = 50.0f;
-float roomTemp = 20.0f;
+float roomTemp = 10.0f;
 float roomHumidity = 0.0f;
 bool heatNeeded = false;
 uint8_t heatNeededOverride = 0; // 0 no override, 1 - override false, 2 or else - override true
@@ -105,19 +105,17 @@ uint8_t noPressCycles = 0;
 // hot water probe - periodically allow water to flow for 10s
 bool hotWaterProbeHadRelayOn = false;
 bool hotWaterProbeEnforced = false;
-uint8_t hotWaterProbeCycles = 0;
+//uint8_t hotWaterProbeCycles = 0;
 
-float pidBoilerSet = 0, pidBoilerIn = 0, pidBoilerOut = 0;
+float pidBoilerOut = 0;
 // K_u = 100 (maybe less), T_u = 30s (pretty stable)
-//PID pidBoiler(&pidBoilerIn, &pidBoilerOut, &pidBoilerSet, 33.33f, 0.1f, 0.0f, DIRECT);
-QuickPID pidBoiler(&pidBoilerIn, &pidBoilerOut, &pidBoilerSet);
+ThermoinoPID pidBoiler(t_stateUpdate_readSensors.getInterval());
 //sTune tuner(&pidBoilerIn, &pidBoilerOut, sTune::NoOvershoot_PID, sTune::directIP, sTune::printOFF);
 
 
-float pidRelaySet = 0, pidRelayIn = 0, pidRelayOut = 0;
+float pidRelayOut = 0;
 // K_u = 0.5f, T_u = 280s
-//PID pidRelay(&pidRelayIn, &pidRelayOut, &pidRelaySet, 0.5f, 0.0f, 0.0f, DIRECT);
-QuickPID pidRelay(&pidRelayIn, &pidRelayOut, &pidRelaySet);
+ThermoinoPID pidRelay(t_stateUpdate_readSensors.getInterval());
 
 uint8_t deviceAddress;
 
@@ -125,12 +123,7 @@ const float boilerPidOutOffset = -50.0f;
 
 void setup()
 {
-    Serial.begin(115200);
-
-    for (int i = 0; i < 10 && !Serial; ++i) {
-        // wait for serial port to connect. Needed for native USB port only
-        delay(10);
-    }
+    serialLineSetup();
 
     eepromInit();
 
@@ -166,7 +159,6 @@ void setup()
 
     pidBoiler.SetOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
     pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
-    pidBoiler.SetMode(QuickPID::Control::timer);
 
     pidRelay.SetTunings(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
     pidRelay.SetOutputLimits(0.0f, float(relayWindowFragments));
@@ -218,13 +210,13 @@ const int8_t radiatorCount = 10;
 const int8_t boilerVolume = 36;
 const uint32_t boilerPower = 18000;
 #define waterHeatCapacity 4180.0f
-const uint32_t heatedAirOtherCapacity = 2000000;
+const uint32_t heatedAirOtherCapacity = 4000000;
 const int8_t outsideTemp = 10;
 const int16_t circuitVolume = int16_t(float(radiatorCount) * 5.8f);
 
 float circuitTemp = 40;
 
-uint64_t lastSimulate = UINT64_MAX;
+uint32_t lastSimulate = UINT32_MAX;
 float lastPower = 0.0f;
 void stateUpdate_simulator_cb()
 {
@@ -236,13 +228,13 @@ void stateUpdate_simulator_cb()
     const float circuitPower = float(radiatorCount) * simulate_radiatorPower(circuitTemp - roomTemp);
 
     // max 8 kW (temp difference 20 C) lost due to insulation
-    const float insulationLost = max(0, 8000.0f * ((roomTemp - outsideTemp) / 20)) ;
+    const float insulationLost = max(0, 10000.0f * ((roomTemp - outsideTemp) / 20)) ;
     const float boilerAsRadiator = simulate_radiatorPower(boilerTemp - roomTemp) * 2;
     const float roomHeat = circuitPower + boilerAsRadiator - insulationLost;
 
     const float boilerPowerAngle = min(
-        max(lastPower - 1000.0f, float(boilerPower * currAngle) / 100),
-        lastPower + 1000.0f
+        max(lastPower - (1000.0f * dTime), float(boilerPower * currAngle) / 100),
+        lastPower + (1000.0f * dTime)
     );
     lastPower = boilerPowerAngle;
 
@@ -252,7 +244,7 @@ void stateUpdate_simulator_cb()
     boilerTemp += boilerDelta;
 
     if (circuitRelay) {
-        const float conduct = (boilerTemp - circuitTemp) * waterHeatCapacity * 2.639f * 0.2f; // 2.63 is dm^3*s^-1 of the circuit relay
+        const float conduct = (boilerTemp - circuitTemp) * waterHeatCapacity * 2.639f * 0.02f; // 2.63 is dm^3*s^-1 of the circuit relay
         boilerTemp -= float(double(conduct * dTime) / (double(boilerVolume) * waterHeatCapacity));
         circuitTemp += float(double(conduct * dTime) / (double(circuitVolume) * waterHeatCapacity));
     }
@@ -283,7 +275,11 @@ void stateUpdate_heatNeeded_cb()
     heatNeededCurrentFragment++;
     if (heatNeededCurrentFragment >= relayWindowFragments) {
         heatNeededCurrentFragment = 0;
-        pidRelayAtStartOfWindow = lround(pidRelayOut);
+        pidRelayAtStartOfWindow = lround(double(pidRelayOut));
+#if PRINT_SERIAL_UPDATES
+        Serial.print(F("DRQ:HPWM:"));
+        Serial.println(pidRelayAtStartOfWindow);
+#endif
     }
     if (heatNeededOverride == 0) {
         heatNeeded = pidRelayAtStartOfWindow > heatNeededCurrentFragment;
@@ -303,26 +299,26 @@ void stateUpdate_heatNeeded_cb()
     }
 }
 
-void stateUpdate_hotWaterProbe_cb()
-{
-    if (config.settingsSelected != -1) {
-        return; // hot water probe disabled in settings
-    }
-    hotWaterProbeCycles++;
-    if (hotWaterProbeCycles > 5) {
-        hotWaterProbeCycles = 0;
-        if (!hotWaterProbeHadRelayOn) {
-            hotWaterProbeEnforced = true;
-            notifyTask(&t_stateUpdate_angleAndRelay, false);
-            notifyTask(&t_effect_printStatus, false);
-        }
-    } else if(hotWaterProbeEnforced) {
-        // turn off after one cycle of being on
-        hotWaterProbeEnforced = false;
-        notifyTask(&t_stateUpdate_angleAndRelay, false);
-        notifyTask(&t_effect_printStatus, false);
-    }
-}
+//void stateUpdate_hotWaterProbe_cb()
+//{
+//    if (config.settingsSelected != -1) {
+//        return; // hot water probe disabled in settings
+//    }
+//    hotWaterProbeCycles++;
+//    if (hotWaterProbeCycles > 5) {
+//        hotWaterProbeCycles = 0;
+//        if (!hotWaterProbeHadRelayOn) {
+//            hotWaterProbeEnforced = true;
+//            notifyTask(&t_stateUpdate_angleAndRelay, false);
+//            notifyTask(&t_effect_printStatus, false);
+//        }
+//    } else if(hotWaterProbeEnforced) {
+//        // turn off after one cycle of being on
+//        hotWaterProbeEnforced = false;
+//        notifyTask(&t_stateUpdate_angleAndRelay, false);
+//        notifyTask(&t_effect_printStatus, false);
+//    }
+//}
 
 void stateUpdate_readSensors_cb()
 {
@@ -362,9 +358,6 @@ void stateUpdate_readSensors_cb()
     stateUpdate_simulator_cb();
 #endif
 
-    pidBoilerIn = boilerTemp;
-    pidRelayIn = roomTemp;
-
 //    switch (tuner.Run()) {
 //        case tuner.sample:
 //            break;
@@ -376,9 +369,11 @@ void stateUpdate_readSensors_cb()
 //        case tuner.runPid:
 //            break;
 //    }
-    pidBoiler.Compute();
-    if (!underheating) {
-        pidRelay.Compute();
+    if (config.settingsSelected != MENU_POS_VENT_MANUAL) {
+        pidBoilerOut = pidBoiler.Compute(boilerTemp, (float)config.refTempBoiler);
+    }
+    if (!underheating && config.settingsSelected != MENU_POS_HEAT_MANUAL) {
+        pidRelayOut = pidRelay.Compute(roomTemp, (float) config.refTempRoom);
     }
 
     if((boilerTemp != lastBoilerTemp) || (roomTemp != lastRoomTemp)) {
@@ -396,8 +391,6 @@ void stateUpdate_readSensors_cb()
     DEBUG_TASK_RET("stateUpdate_readSensors");
 #endif
 }
-
-#define relay_or_override() config.circuitRelayForced == 0 ? circuitRelay : config.circuitRelayForced == 1
 
 void stateUpdate_angleAndRelay_cb()
 {
@@ -465,8 +458,6 @@ void stateUpdate_angleAndRelay_cb()
 #endif
 }
 
-#define MAX_SERVO_STEP 10
-
 void effect_refreshServoAndRelay_cb()
 {
 #if DEBUG_LEVEL > 0
@@ -528,33 +519,10 @@ void effect_processSettings_cb()
     DEBUG_TASK_ENTRY("stateUpdate_readButtons");
 #endif
     eepromUpdate();
-    pidRelay.SetMode(config.settingsSelected == MENU_POS_HEAT_MANUAL ? QuickPID::Control::manual : QuickPID::Control::timer);
-    pidBoiler.SetMode(config.settingsSelected == MENU_POS_VENT_MANUAL ? QuickPID::Control::manual : QuickPID::Control::timer);
-    pidBoilerSet = config.refTempBoiler;
-    pidRelaySet = config.refTempRoom;
     pidBoiler.SetTunings(config.pidKp, config.pidKi * simulationSpeed, config.pidKd * simulationSpeed);
     pidRelay.SetTunings(config.pidRelayKp, config.pidRelayKi * simulationSpeed, config.pidRelayKd * simulationSpeed);
 #if PRINT_SERIAL_UPDATES
-    Serial.print(F("DRQ:R:"));
-    Serial.println(String(relay_or_override()));
-    Serial.print(F("DRQ:O:"));
-    Serial.println(angle);
-    Serial.print(F("DRQ:BRT:"));
-    Serial.println(config.refTempBoiler);
-    Serial.print(F("DRQ:SET:"));
-    Serial.println(config.settingsSelected);
-    Serial.print(F("DRQ:PID_BL_Kp:"));
-    Serial.println(config.pidKp);
-    Serial.print(F("DRQ:PID_BL_Ki:"));
-    Serial.println(config.pidKi);
-    Serial.print(F("DRQ:PID_BL_Kd:"));
-    Serial.println(config.pidKd);
-    Serial.print(F("DRQ:PID_CR_Kp:"));
-    Serial.println(config.pidRelayKp);
-    Serial.print(F("DRQ:PID_CR_Ki:"));
-    Serial.println(config.pidRelayKi);
-    Serial.print(F("DRQ:PID_CR_Kd:"));
-    Serial.println(config.pidRelayKd);
+    serialPrintConfig();
 #endif
 }
 
@@ -657,15 +625,16 @@ void printStatusOverviewBottom()
     lcd.noCursor();
     lcd.setCursor(0, 1);
     // 2 + 4 + 2 = 8 chars
-    snprintf(buffer, MAX_BUFFER_LEN, "H %2d%% ", lround((float(pidRelayAtStartOfWindow) / relayWindowFragments) * 99));
+    const int heatPWM = (int) lround((double(pidRelayAtStartOfWindow) / relayWindowFragments) * 99);
+    snprintf(buffer, MAX_BUFFER_LEN, "H %2d%% ", heatPWM);
     lcd.print(buffer);
     // 2 + 4 + 1 = 7 chars
     snprintf(buffer, MAX_BUFFER_LEN, "R %4.1f\xDF", (double)roomTemp);
     lcd.print(buffer);
     if (heatNeededOverride != 0) {
-        lcd.print(("  \x5E"));
+        lcd.print("  \x5E");
     } else {
-        lcd.print(("   "));
+        lcd.print("   ");
     }
 }
 
@@ -710,18 +679,11 @@ bool processSettings()
     bool anyPressed;
     if (config.settingsSelected >= 0) {
         const ConfigMenuItem_t *currentItem = getMenu(config.settingsSelected);
-        if (readButton(&btn3) == 1) {
-            stateChanged = true;
-            currentItem->handler(currentItem->param, -1);
-        } else if (btn3.pressedFor > 10) {
+        if (readButton(&btn3) == 1 || btn3.pressedFor > 10) {
             stateChanged = true;
             currentItem->handler(currentItem->param, -1);
         }
-
-        if (readButton(&btn4) == 1) {
-            stateChanged = true;
-            currentItem->handler(currentItem->param, 1);
-        } else if (btn4.pressedFor > 10) {
+        if (readButton(&btn4) == 1 || btn4.pressedFor > 10) {
             stateChanged = true;
             currentItem->handler(currentItem->param, 1);
         }
@@ -753,9 +715,7 @@ void eepromInit()
     EEPROM.get(0, checkCode);
     if (checkCode == EEPROM_MAGIC) {
         EEPROM.get(sizeof(checkCode), config);
-		if (config.settingsSelected < -1) {
-			config.settingsSelected = -1;
-		} else if (config.settingsSelected > MAX_MENU_ITEMS) {
+		if (config.settingsSelected < -1 || config.settingsSelected > MAX_MENU_ITEMS) {
 			config.settingsSelected = -1;
 		}
 	// migration
@@ -774,7 +734,7 @@ void eepromUpdate()
     EEPROM.put(offset, checkCode);
     offset += sizeof(checkCode);
     EEPROM.put(offset, config);
-    offset += sizeof(config);
+//    offset += sizeof(config);
 //    EEPROM.put(offset, maxDeltaSettings);
 //    offset += sizeof(maxDeltaSettings);
 //    EEPROM.put(offset, maxDeltaHigh);

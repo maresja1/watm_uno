@@ -49,6 +49,8 @@
 #define MENU_POS_SERVO_MIN 6
 #define MENU_POS_SERVO_MAX 7
 
+#define relay_or_override() config.circuitRelayForced == 0 ? circuitRelay : config.circuitRelayForced == 1
+
 #define MAX_BUFFER_LEN 20
 extern char buffer[];
 
@@ -137,7 +139,9 @@ void stateUpdate_angleAndRelay_cb();
 void stateUpdate_readButtons_cb();
 void effect_processSettings_cb();
 
+void serialLineSetup();
 void serialLineBufferLoop();
+void serialPrintConfig();
 
 void notifyTask(Task *task, bool immediate);
 
