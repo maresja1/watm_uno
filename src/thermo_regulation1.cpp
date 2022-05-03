@@ -273,11 +273,11 @@ void stateUpdate_heatNeeded_cb()
     if (heatNeededCurrentFragment >= relayWindowFragments) {
         heatNeededCurrentFragment = 0;
         pidRelayAtStartOfWindow = lround(double(pidRelay.getConstrainedValue()));
-#if PRINT_SERIAL_UPDATES
-        Serial.print(F("DRQ:HPWM:"));
-        Serial.println(pidRelayAtStartOfWindow);
-#endif
     }
+#if PRINT_SERIAL_UPDATES
+    Serial.print(F("DRQ:HPWM:"));
+    Serial.println(lround(double(pidRelay.getConstrainedValue())));
+#endif
     if (heatNeededOverride == 0) {
         heatNeeded = pidRelayAtStartOfWindow > heatNeededCurrentFragment;
 //        heatNeeded = (heatNeeded && (roomTemp - config.refTempRoom <= (config.debounceLimitC / 2))) ||
@@ -290,8 +290,6 @@ void stateUpdate_heatNeeded_cb()
 #if PRINT_SERIAL_UPDATES
         Serial.print(F("DRQ:HN:"));
         Serial.println(heatNeeded);
-        Serial.print(F("DRQ:HPWM:"));
-        Serial.println(pidRelayAtStartOfWindow);
 #endif
     }
 }
@@ -438,8 +436,12 @@ void stateUpdate_angleAndRelay_cb()
 }
 
 uint8_t getVentAngleFromPID() {
-    const float feedForward = circuitRelay ? 1.0f : 0.8f;
-    return max(min(int((*pidBoiler.valPtr() - boilerPidOutOffset) * feedForward), 99), 0);
+    const float feedForward = circuitRelay ? 1.0f : 0.66f;
+    return constrain(
+        int(*pidBoiler.valPtr()) * feedForward,
+        0.0f + boilerPidOutOffset,
+        99.0f + boilerPidOutOffset
+    ) - boilerPidOutOffset;
 }
 
 void effect_refreshServoAndRelay_cb()
@@ -503,8 +505,8 @@ void effect_processSettings_cb()
     DEBUG_TASK_ENTRY("stateUpdate_readButtons");
 #endif
     eepromUpdate();
-    pidBoiler.setParams(config.pidKp, config.pidKi * simulationSpeed, config.pidKd * simulationSpeed);
-    pidRelay.setParams(config.pidRelayKp, config.pidRelayKi * simulationSpeed, config.pidRelayKd * simulationSpeed);
+    pidBoiler.setParams(config.pidKp, config.pidKi, config.pidKd);
+    pidRelay.setParams(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
 #if PRINT_SERIAL_UPDATES
     serialPrintConfig();
 #endif

@@ -162,7 +162,7 @@ void serialPrintConfig() {
     Serial.print(F("DRQ:PID_CR_Kd:"));
     Serial.println(config.pidRelayKd, 4);
     Serial.print(F("DRQ:HPWM:"));
-    Serial.println(pidRelayAtStartOfWindow);
+    Serial.println(lround(double(pidRelay.getConstrainedValue())));
 }
 
 void notifySettingsChanged() {
