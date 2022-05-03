@@ -13,7 +13,7 @@ public:
 
     void compute(float input, float setPoint);
 
-    float getConstraintedValue();
+    float getConstrainedValue();
 
     float *valPtr();
 

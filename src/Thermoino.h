@@ -84,6 +84,7 @@ struct Configuration {
     int16_t settingsSelected;
 };
 
+extern uint8_t pidRelayAtStartOfWindow;
 extern Configuration config;
 extern uint8_t angle;
 extern uint8_t currAngle;

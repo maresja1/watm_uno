@@ -59,6 +59,7 @@ void stateUpdate_serialReader_cb()
 #define CMD_HNO "HNO"
 #define CMD_VENT_SET "O"
 #define CMD_BOILER_REF_TEMP_SET "BRT"
+#define CMD_ROOM_REF_TEMP_SET "RRT"
 #define CMD_PID_BL_Kp "PID_BL_Kp"
 #define CMD_PID_BL_Ki "PID_BL_Ki"
 #define CMD_PID_BL_Kd "PID_BL_Kd"
@@ -96,6 +97,9 @@ void stateUpdate_serialReader_cb()
                 screenSaverWakeup();
             OR_PARSE(CMD_BOILER_REF_TEMP_SET)
                 config.refTempBoiler = strtol(valueBuffer.c_str(), nullptr, 10);
+                notifySettingsChanged();
+            OR_PARSE(CMD_ROOM_REF_TEMP_SET)
+                config.refTempRoom = strtod(valueBuffer.c_str(), nullptr);
                 notifySettingsChanged();
             OR_PARSE(CMD_PID_BL_Kp)
                 config.pidKp = strtod(valueBuffer.c_str(), nullptr);
@@ -141,6 +145,8 @@ void serialPrintConfig() {
     Serial.println(angle);
     Serial.print(F("DRQ:BRT:"));
     Serial.println(config.refTempBoiler);
+    Serial.print(F("DRQ:RRT:"));
+    Serial.println(config.refTempRoom);
     Serial.print(F("DRQ:SET:"));
     Serial.println(config.settingsSelected);
     Serial.print(F("DRQ:PID_BL_Kp:"));
@@ -155,6 +161,8 @@ void serialPrintConfig() {
     Serial.println(config.pidRelayKi, 4);
     Serial.print(F("DRQ:PID_CR_Kd:"));
     Serial.println(config.pidRelayKd, 4);
+    Serial.print(F("DRQ:HPWM:"));
+    Serial.println(pidRelayAtStartOfWindow);
 }
 
 void notifySettingsChanged() {

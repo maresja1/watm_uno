@@ -107,11 +107,11 @@ bool hotWaterProbeEnforced = false;
 //uint8_t hotWaterProbeCycles = 0;
 
 // K_u = 100 (maybe less), T_u = 30s (pretty stable)
-ThermoinoPID pidBoiler(t_stateUpdate_readSensors.getInterval());
+ThermoinoPID pidBoiler(t_stateUpdate_readSensors.getInterval() / 1000);
 //sTune tuner(&pidBoilerIn, &pidBoilerOut, sTune::NoOvershoot_PID, sTune::directIP, sTune::printOFF);
 
 // K_u = 0.5f, T_u = 280s
-ThermoinoPID pidRelay(t_stateUpdate_readSensors.getInterval());
+ThermoinoPID pidRelay(t_stateUpdate_readSensors.getInterval() / 1000);
 
 uint8_t deviceAddress;
 
@@ -272,7 +272,7 @@ void stateUpdate_heatNeeded_cb()
     heatNeededCurrentFragment++;
     if (heatNeededCurrentFragment >= relayWindowFragments) {
         heatNeededCurrentFragment = 0;
-        pidRelayAtStartOfWindow = lround(double(pidRelay.getConstraintedValue()));
+        pidRelayAtStartOfWindow = lround(double(pidRelay.getConstrainedValue()));
 #if PRINT_SERIAL_UPDATES
         Serial.print(F("DRQ:HPWM:"));
         Serial.println(pidRelayAtStartOfWindow);

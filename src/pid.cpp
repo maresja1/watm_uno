@@ -15,7 +15,7 @@ ThermoinoPID::ThermoinoPID(uint32_t period)
 
     this->A0 = this->A0_noint = this->A1 = this->A2 = 0;
 
-    ThermoinoPID::setOutputLimits(0, 100);
+    ThermoinoPID::setOutputLimits(0.0f, 100.0f);
 }
 
 void ThermoinoPID::compute(const float input, const float setPoint) {
@@ -43,9 +43,19 @@ void ThermoinoPID::compute(const float input, const float setPoint) {
     } else {
         lastOutput += (A0_noint * error) + (A1 * lastError) + (A2 * errorBeforeLast);
     }
+
+    // avoid wind-up
+    const float dist = (outMax - outMin);
+    if (lastOutput > (outMax + dist)) {
+        lastOutput = outMax + dist;
+    }
+
+    if (lastOutput < (outMin - dist)) {
+        lastOutput = outMin - dist;
+    }
 }
 
-float ThermoinoPID::getConstraintedValue() {
+float ThermoinoPID::getConstrainedValue() {
     // consider limiting lastOutput to avoid windup
     return constrain(lastOutput, outMin, outMax);
 }
@@ -60,9 +70,12 @@ void ThermoinoPID::setParams(float Kp, float Ki, float Kd) {
 //    A0 := Kp + Ki*dt + Kd/dt
 //    A1 := -Kp - 2*Kd/dt
 //    A2 := Kd/dt
+    this->lastOutput = constrain(this->lastOutput, this->outMin, this->outMax);
+//    const float Ki = Ti == 0.0f ? 0.0f : Kp / Ti;
+//    const float Kd = Kp * Td;
     this->A0_noint = Kp + (Kd / period);
     this->A0 = this->A0_noint + (Ki * period);
-    this->A1 = -Kp - (2 * ( Kd / period));
+    this->A1 = -Kp - (2 * (Kd / period));
     this->A2 = Kd / period;
 }
 
