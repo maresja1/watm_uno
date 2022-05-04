@@ -465,14 +465,14 @@ void stateUpdate_angleAndRelay_cb()
 
 uint8_t getVentAngleFromPID() {
     const uint16_t nextHeatPWM = lround(double(pidHeatPWM.getConstrainedValue()));
-    const int16_t startHeatingIn = heatNeededCurrentFragment - heatPwmAtWindowStart;
-    const int16_t stopHeatingIn = relayWindowFragments - heatNeededCurrentFragment;
-    // if the heating is going to start soon
-    const float feedForward = (!heatNeeded && startHeatingIn >= 0 && startHeatingIn < 2) ?
-        15.0f * float(startHeatingIn + 1) :
-        // if the heating is going to stop soon
-        (heatNeeded && nextHeatPWM != relayWindowFragments && stopHeatingIn < 2) ?
-            -15.0f * float(stopHeatingIn + 1) :
+    const int16_t stopHeatingIn = heatPwmAtWindowStart - heatNeededCurrentFragment;
+    const int16_t startHeatingIn = relayWindowFragments - heatNeededCurrentFragment;
+    // if the heating is going to stop soon
+    const float feedForward = (stopHeatingIn >= 0 && stopHeatingIn < 2 && nextHeatPWM < relayWindowFragments - 2) ?
+        -15.0f * float(stopHeatingIn + 1) :
+        // if the heating is going to start soon
+        (stopHeatingIn < 0  && startHeatingIn < 2) ?
+            15.0f * float(startHeatingIn + 1) :
             // otherwise
             0.0f;
 
