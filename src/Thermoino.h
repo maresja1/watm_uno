@@ -60,14 +60,14 @@ typedef struct ConfigMenuItem {
     void (*formatter)(void* param, Print &print, void *value);
 } ConfigMenuItem_t;
 
+const float debounceLimitC = 2.0f;
+
 struct Configuration {
     uint8_t refTempBoiler;
-    uint8_t refTempBoilerIdle;
     float refTempRoom;
     uint8_t circuitRelayForced;
     int16_t servoMin;
     int16_t servoMax;
-    float debounceLimitC;
     uint8_t underheatingLimit;
     uint8_t overheatingLimit;
     // linear interpolation (least squares) of the following points:
@@ -84,7 +84,7 @@ struct Configuration {
     int16_t settingsSelected;
 };
 
-extern uint8_t pidRelayAtStartOfWindow;
+extern uint8_t heatPwmAtWindowStart;
 extern Configuration config;
 extern uint8_t angle;
 extern uint8_t currAngle;
@@ -111,7 +111,7 @@ extern Task t_effect_processSettings;
 extern LiquidCrystal_I2C lcd;
 
 extern ThermoinoPID pidBoiler;
-extern ThermoinoPID pidRelay;
+extern ThermoinoPID pidHeatPWM;
 
 typedef struct Button {
     uint8_t pin;

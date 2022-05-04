@@ -61,12 +61,10 @@ const uint8_t relayWindowFragments = 30;
 
 Configuration config = {
     .refTempBoiler = 55,
-    .refTempBoilerIdle = 50,
     .refTempRoom = 21.0f,
     .circuitRelayForced = 0,  // 0 no override, 1 - override false, 2 or else - override true
     .servoMin = 0,
     .servoMax = 180,
-    .debounceLimitC = 2.0f,
     .underheatingLimit = 45,
     .overheatingLimit = 80,
     // least squares of (1,2), (20,6), (44,12) - y = 0.2333x + 1.612
@@ -75,13 +73,13 @@ Configuration config = {
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
     // following params were for sim x10 without rescaling
-    .pidKp = 4.0f,
-    .pidKi = 0.01f,
-    .pidKd = 0.04f,
+    .pidKp = 20.0f,
+    .pidKi = 0.05f,
+    .pidKd = 8.00f,
     // K_u = 0.5 (maybe less), T_u = 800s
-    .pidRelayKp = 12.0f,
-    .pidRelayKi = 0.0001f,
-    .pidRelayKd = 1.60f,
+    .pidRelayKp = 20.0f,
+    .pidRelayKi = 0.005f,
+    .pidRelayKd = 0.0f,
     .settingsSelected = -1
 };
 
@@ -111,7 +109,7 @@ ThermoinoPID pidBoiler(t_stateUpdate_readSensors.getInterval() / 1000);
 //sTune tuner(&pidBoilerIn, &pidBoilerOut, sTune::NoOvershoot_PID, sTune::directIP, sTune::printOFF);
 
 // K_u = 0.5f, T_u = 280s
-ThermoinoPID pidRelay(t_stateUpdate_readSensors.getInterval() / 1000);
+ThermoinoPID pidHeatPWM(t_stateUpdate_readSensors.getInterval() / 1000);
 
 uint8_t deviceAddress;
 
@@ -155,11 +153,11 @@ void setup()
 
     pidBoiler.setOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
     pidBoiler.setParams(config.pidKp, config.pidKi, config.pidKd);
-    pidRelay.setIntegralMaxError(3.0f);
+    pidHeatPWM.setIntegralMaxError(3.0f);
 
-    pidRelay.setOutputLimits(0.0f, float(relayWindowFragments));
-    pidRelay.setParams(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
-    pidRelay.setIntegralMaxError(1.5f);
+    pidHeatPWM.setOutputLimits(0.0f, float(relayWindowFragments));
+    pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
+    pidHeatPWM.setIntegralMaxError(1.5f);
 
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
@@ -241,7 +239,7 @@ void stateUpdate_simulator_cb()
     boilerTemp += boilerDelta;
 
     if (circuitRelay) {
-        const float conduct = (boilerTemp - circuitTemp) * waterHeatCapacity * 2.639f * 0.02f; // 2.63 is dm^3*s^-1 of the circuit relay
+        const float conduct = (boilerTemp - circuitTemp) * waterHeatCapacity * 2.639f * 0.01f; // 2.63 is dm^3*s^-1 of the circuit relay
         boilerTemp -= float(double(conduct * dTime) / (double(boilerVolume) * waterHeatCapacity));
         circuitTemp += float(double(conduct * dTime) / (double(circuitVolume) * waterHeatCapacity));
     }
@@ -265,23 +263,53 @@ void stateUpdate_simulator_cb()
 #endif
 
 uint8_t heatNeededCurrentFragment = relayWindowFragments * 0.8f;
-uint8_t pidRelayAtStartOfWindow = 0;
+uint8_t heatPwmAtWindowStart = 0;
+
 void stateUpdate_heatNeeded_cb()
 {
     const bool lastHeatNeeded = heatNeeded;
     heatNeededCurrentFragment++;
+    // breaking edge (fragment) of a window
     if (heatNeededCurrentFragment >= relayWindowFragments) {
         heatNeededCurrentFragment = 0;
-        pidRelayAtStartOfWindow = lround(double(pidRelay.getConstrainedValue()));
+        const uint8_t previousPidRelayAtStartOfWindow = heatPwmAtWindowStart;
+        heatPwmAtWindowStart = lround(double(pidHeatPWM.getConstrainedValue()));
+
+        // avoid switching for shorter period than a minute (assuming 6 ticks is a minute)
+        if (heatPwmAtWindowStart < 3) {
+            heatPwmAtWindowStart = 0;
+        } else if (heatPwmAtWindowStart < 6) {
+            heatPwmAtWindowStart = 6;
+        } else if (heatPwmAtWindowStart > (relayWindowFragments - 3)) {
+            heatPwmAtWindowStart = relayWindowFragments;
+        } else if (heatPwmAtWindowStart > (relayWindowFragments - 6)) {
+            heatPwmAtWindowStart = relayWindowFragments - 6;
+        }
+
+        // if the heatPwm has been high for long enough, step up boiler ref. temperature
+        if (
+            float(previousPidRelayAtStartOfWindow) > (relayWindowFragments * 0.9f) &&
+            float(heatPwmAtWindowStart) > (relayWindowFragments * 0.9f) &&
+            config.refTempBoiler < (config.overheatingLimit - (2 * debounceLimitC))
+        ) {
+            config.refTempBoiler++;
+            notifySettingsChanged();
+        // if the heatPwm has been low for long enough, step down boiler ref. temperature
+        } else if (
+            float(previousPidRelayAtStartOfWindow) < (relayWindowFragments * 0.75f) &&
+            float(heatPwmAtWindowStart) < (relayWindowFragments * 0.75f) &&
+            config.refTempBoiler > (config.underheatingLimit + (2 * debounceLimitC))
+        ) {
+            config.refTempBoiler--;
+            notifySettingsChanged();
+        }
     }
 #if PRINT_SERIAL_UPDATES
     Serial.print(F("DRQ:HPWM:"));
-    Serial.println(lround(double(pidRelay.getConstrainedValue())));
+    Serial.println(lround(double(pidHeatPWM.getConstrainedValue())));
 #endif
     if (heatNeededOverride == 0) {
-        heatNeeded = pidRelayAtStartOfWindow > heatNeededCurrentFragment;
-//        heatNeeded = (heatNeeded && (roomTemp - config.refTempRoom <= (config.debounceLimitC / 2))) ||
-//                     (roomTemp - config.refTempRoom <= -(config.debounceLimitC / 2));
+        heatNeeded = heatPwmAtWindowStart > heatNeededCurrentFragment;
     } else {
         heatNeeded = heatNeededOverride != 1;
     }
@@ -368,7 +396,7 @@ void stateUpdate_readSensors_cb()
         pidBoiler.compute(boilerTemp, (float)config.refTempBoiler);
     }
     if (!underheating && config.settingsSelected != MENU_POS_HEAT_MANUAL) {
-        pidRelay.compute(roomTemp, (float) config.refTempRoom);
+        pidHeatPWM.compute(roomTemp, (float) config.refTempRoom);
     }
 
     if((boilerTemp != lastBoilerTemp) || (roomTemp != lastRoomTemp)) {
@@ -396,11 +424,11 @@ void stateUpdate_angleAndRelay_cb()
 #endif
 
 //    const float boilerDelta = boilerTemp - float(heatNeeded ? config.refTempBoiler : config.refTempBoilerIdle);
-    overheating = (overheating && (boilerTemp - config.overheatingLimit >= (config.debounceLimitC / 2))) ||
-                  (boilerTemp - config.overheatingLimit >= -(config.debounceLimitC / 2));
+    overheating = (overheating && (boilerTemp - config.overheatingLimit >= (debounceLimitC / 2))) ||
+                  (boilerTemp - config.overheatingLimit >= -(debounceLimitC / 2));
 
-    underheating = (underheating && (boilerTemp - config.underheatingLimit <= (config.debounceLimitC / 2))) ||
-                   (boilerTemp - config.underheatingLimit <= -(config.debounceLimitC / 2));
+    underheating = (underheating && (boilerTemp - config.underheatingLimit <= (debounceLimitC / 2))) ||
+                   (boilerTemp - config.underheatingLimit <= -(debounceLimitC / 2));
 
     bool lastCircuitRelay = circuitRelay;
     circuitRelay = (!underheating && (heatNeeded || overheating)) || hotWaterProbeEnforced;
@@ -436,9 +464,15 @@ void stateUpdate_angleAndRelay_cb()
 }
 
 uint8_t getVentAngleFromPID() {
-    const float feedForward = circuitRelay ? 1.0f : 0.66f;
+    const uint16_t nextHeatPWM = lround(double(pidHeatPWM.getConstrainedValue()));
+    // if the heating is going to start soon
+    const float feedForward = (!heatNeeded && heatPwmAtWindowStart + 1 > heatNeededCurrentFragment) ?
+        20.0f :
+        // if the heating is going to stop soon
+        (heatNeeded && heatNeededCurrentFragment + 1 >= relayWindowFragments && nextHeatPWM < relayWindowFragments) ?
+            -20.0f : 0.0f;
     return constrain(
-        int(*pidBoiler.valPtr()) * feedForward,
+        int(*pidBoiler.valPtr()) + feedForward,
         0.0f + boilerPidOutOffset,
         99.0f + boilerPidOutOffset
     ) - boilerPidOutOffset;
@@ -506,7 +540,7 @@ void effect_processSettings_cb()
 #endif
     eepromUpdate();
     pidBoiler.setParams(config.pidKp, config.pidKi, config.pidKd);
-    pidRelay.setParams(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
+    pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
 #if PRINT_SERIAL_UPDATES
     serialPrintConfig();
 #endif
@@ -611,7 +645,7 @@ void printStatusOverviewBottom()
     lcd.noCursor();
     lcd.setCursor(0, 1);
     // 2 + 4 + 2 = 8 chars
-    const int heatPWM = (int) lround((double(pidRelayAtStartOfWindow) / relayWindowFragments) * 99);
+    const int heatPWM = (int) lround((double(heatPwmAtWindowStart) / relayWindowFragments) * 99);
     snprintf(buffer, MAX_BUFFER_LEN, "H %2d%% ", heatPWM);
     lcd.print(buffer);
     // 2 + 4 + 1 = 7 chars
@@ -693,7 +727,7 @@ bool processSettings()
     return stateChanged;
 }
 
-#define EEPROM_MAGIC 0xDEADBE00
+#define EEPROM_MAGIC 0xDEADBE01
 
 void eepromInit()
 {
