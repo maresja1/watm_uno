@@ -288,8 +288,8 @@ void stateUpdate_heatNeeded_cb()
 
         // if the heatPwm has been high for long enough, step up boiler ref. temperature
         if (
-            float(previousPidRelayAtStartOfWindow) > (relayWindowFragments * 0.9f) &&
-            float(heatPwmAtWindowStart) > (relayWindowFragments * 0.9f) &&
+            previousPidRelayAtStartOfWindow > (relayWindowFragments - 2) &&
+            heatPwmAtWindowStart > (relayWindowFragments - 2) &&
             config.refTempBoiler < (config.overheatingLimit - (2 * debounceLimitC))
         ) {
             config.refTempBoiler++;
@@ -465,12 +465,17 @@ void stateUpdate_angleAndRelay_cb()
 
 uint8_t getVentAngleFromPID() {
     const uint16_t nextHeatPWM = lround(double(pidHeatPWM.getConstrainedValue()));
+    const int16_t startHeatingIn = heatNeededCurrentFragment - heatPwmAtWindowStart;
+    const int16_t stopHeatingIn = relayWindowFragments - heatNeededCurrentFragment;
     // if the heating is going to start soon
-    const float feedForward = (!heatNeeded && heatPwmAtWindowStart + 1 > heatNeededCurrentFragment) ?
-        20.0f :
+    const float feedForward = (!heatNeeded && startHeatingIn >= 0 && startHeatingIn < 2) ?
+        15.0f * float(startHeatingIn + 1) :
         // if the heating is going to stop soon
-        (heatNeeded && heatNeededCurrentFragment + 1 >= relayWindowFragments && nextHeatPWM < relayWindowFragments) ?
-            -20.0f : 0.0f;
+        (heatNeeded && nextHeatPWM != relayWindowFragments && stopHeatingIn < 2) ?
+            -15.0f * float(stopHeatingIn + 1) :
+            // otherwise
+            0.0f;
+
     return constrain(
         int(*pidBoiler.valPtr()) + feedForward,
         0.0f + boilerPidOutOffset,
