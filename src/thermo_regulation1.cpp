@@ -469,10 +469,10 @@ uint8_t getVentAngleFromPID() {
     const int16_t startHeatingIn = relayWindowFragments - heatNeededCurrentFragment;
     // if the heating is going to stop soon
     const float feedForward = (stopHeatingIn >= 0 && stopHeatingIn < 2 && nextHeatPWM < relayWindowFragments - 2) ?
-        -15.0f * float(stopHeatingIn + 1) :
+        -10.0f * float(stopHeatingIn + 1) :
         // if the heating is going to start soon
         (stopHeatingIn < 0  && startHeatingIn < 2) ?
-            15.0f * float(startHeatingIn + 1) :
+            10.0f * float(startHeatingIn + 1) :
             // otherwise
             0.0f;
 
