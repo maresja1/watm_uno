@@ -264,6 +264,8 @@ void stateUpdate_simulator_cb()
 
 uint8_t heatNeededCurrentFragment = relayWindowFragments * 0.8f;
 uint8_t heatPwmAtWindowStart = 0;
+uint8_t prevHeatPwmAtWindowStart = 0;
+int8_t onEdgeCounter = 0;
 
 void stateUpdate_heatNeeded_cb()
 {
@@ -272,7 +274,7 @@ void stateUpdate_heatNeeded_cb()
     // breaking edge (fragment) of a window
     if (heatNeededCurrentFragment >= relayWindowFragments) {
         heatNeededCurrentFragment = 0;
-        const uint8_t previousPidRelayAtStartOfWindow = heatPwmAtWindowStart;
+        prevHeatPwmAtWindowStart = heatPwmAtWindowStart;
         heatPwmAtWindowStart = lround(double(pidHeatPWM.getConstrainedValue()));
 
         // avoid switching for shorter period than a minute (assuming 6 ticks is a minute)
@@ -288,18 +290,26 @@ void stateUpdate_heatNeeded_cb()
 
         // if the heatPwm has been high for long enough, step up boiler ref. temperature
         if (
-            previousPidRelayAtStartOfWindow > (relayWindowFragments - 2) &&
-            heatPwmAtWindowStart > (relayWindowFragments - 2) &&
-            config.refTempBoiler < (config.overheatingLimit - (2 * debounceLimitC))
+            prevHeatPwmAtWindowStart > (relayWindowFragments - 2) &&
+            heatPwmAtWindowStart > (relayWindowFragments - 2)
         ) {
-            config.refTempBoiler++;
-            notifySettingsChanged();
+            onEdgeCounter++;
         // if the heatPwm has been low for long enough, step down boiler ref. temperature
         } else if (
-            float(previousPidRelayAtStartOfWindow) < (relayWindowFragments * 0.75f) &&
-            float(heatPwmAtWindowStart) < (relayWindowFragments * 0.75f) &&
-            config.refTempBoiler > (config.underheatingLimit + (2 * debounceLimitC))
+            float(prevHeatPwmAtWindowStart) < (relayWindowFragments * 0.75f) &&
+            float(heatPwmAtWindowStart) < (relayWindowFragments * 0.75f)
         ) {
+            onEdgeCounter--;
+        } else {
+            onEdgeCounter = 0;
+        }
+
+        if (onEdgeCounter >= 5 && config.refTempBoiler < (config.overheatingLimit - (2 * debounceLimitC))) {
+            onEdgeCounter = 0;
+            config.refTempBoiler++;
+            notifySettingsChanged();
+        } else if (onEdgeCounter <= -5 && config.refTempBoiler > (config.underheatingLimit + (2 * debounceLimitC))) {
+            onEdgeCounter = 0;
             config.refTempBoiler--;
             notifySettingsChanged();
         }
