@@ -89,7 +89,7 @@ uint8_t angle = 50;
 uint8_t currAngle = 50;
 int16_t settingsSelectedPrint = -2;
 float boilerTemp = 50.0f;
-float roomTemp = 20.0f;
+float roomTemp = 21.0f;
 bool heatNeeded = false;
 uint8_t heatNeededOverride = 0; // 0 no override, 1 - override false, 2 or else - override true
 bool overheating = false;
@@ -451,7 +451,7 @@ void stateUpdate_angleAndRelay_cb()
     } else if (config.settingsSelected == MENU_POS_SERVO_MAX) {
         angle = 99;
     } else {
-        angle = getVentAngleFromPID();
+        angle = (getVentAngleFromPID() + (7 * angle)) / 8;
     }
 
     if (
@@ -476,13 +476,18 @@ void stateUpdate_angleAndRelay_cb()
 uint8_t getVentAngleFromPID() {
     const uint16_t nextHeatPWM = lround(double(pidHeatPWM.getConstrainedValue()));
     const int16_t stopHeatingIn = heatPwmAtWindowStart - heatNeededCurrentFragment;
-    const int16_t startHeatingIn = relayWindowFragments - heatNeededCurrentFragment;
-    // if the heating is going to stop soon
-    const float feedForward = (stopHeatingIn >= 0 && stopHeatingIn < 2 && nextHeatPWM < relayWindowFragments - 2) ?
-        -10.0f * float(stopHeatingIn + 1) :
-        // if the heating is going to start soon
-        (stopHeatingIn < 0  && startHeatingIn < 2) ?
-            10.0f * float(startHeatingIn + 1) :
+    const int16_t newWindowIn = relayWindowFragments - heatNeededCurrentFragment;
+    const bool heatingIsGoingStartAtNewWindow = nextHeatPWM >= 3 && heatPwmAtWindowStart < relayWindowFragments;
+    const bool heatStartedATickAgo = heatNeededCurrentFragment == 0 &&
+            prevHeatPwmAtWindowStart < relayWindowFragments &&
+            heatPwmAtWindowStart > 0;
+
+    // if the heating is going to stop in two or fewer ticks or stopped one tick ago
+    const float feedForward = (stopHeatingIn >= -1 && stopHeatingIn < 2 && heatPwmAtWindowStart > 0) ?
+        -15.0f : // * float(stopHeatingIn + 2) :
+        // if the heating is going to start in two or fewer ticks or started one tick ago
+        (heatingIsGoingStartAtNewWindow && newWindowIn < 2) || heatStartedATickAgo ?
+            15.0f : // * float(newWindowIn + 1) :
             // otherwise
             0.0f;
 
