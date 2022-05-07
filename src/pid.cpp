@@ -13,7 +13,7 @@ ThermoinoPID::ThermoinoPID(uint32_t period)
     this->period = period;
     this->noIntOffset = __FLT_MAX__;
 
-    this->A0 = this->A0_noint = this->A1 = this->A2 = 0;
+    this->A0_integral = this->A0_nonintegral = this->A1 = this->A2 = 0;
 
     ThermoinoPID::setOutputLimits(0.0f, 100.0f);
 }
@@ -39,25 +39,31 @@ void ThermoinoPID::compute(const float input, const float setPoint) {
     lastError = error;
     error = setPoint - input;
     if (abs(error) < this->noIntOffset) {
-        lastOutput += (A0 * error) + (A1 * lastError) + (A2 * errorBeforeLast);
+        lastOutput += (A0_nonintegral * error) + (A1 * lastError) + (A2 * errorBeforeLast);
+        lastOutputIntegral += A0_integral * error;
     } else {
-        lastOutput += (A0_noint * error) + (A1 * lastError) + (A2 * errorBeforeLast);
+        lastOutput += (A0_nonintegral * error) + (A1 * lastError) + (A2 * errorBeforeLast);
+        lastOutputIntegral = 0;
     }
 
     // avoid wind-up
-    const float dist = (outMax - outMin);
-    if (lastOutput > (outMax + dist)) {
-        lastOutput = outMax + dist;
+    if (lastOutputIntegral > outMax) {
+        lastOutputIntegral = outMax;
     }
 
-    if (lastOutput < (outMin - dist)) {
-        lastOutput = outMin - dist;
+    if (lastOutputIntegral < outMin) {
+        lastOutputIntegral = outMin;
     }
 }
 
 float ThermoinoPID::getConstrainedValue() {
     // consider limiting lastOutput to avoid windup
-    return constrain(lastOutput, outMin, outMax);
+    return constrain(lastOutput + lastOutputIntegral, outMin, outMax);
+}
+
+void ThermoinoPID::setValue(float val) {
+    lastOutput = val;
+    lastOutputIntegral = 0.0f;
 }
 
 float *ThermoinoPID::valPtr() {
@@ -73,8 +79,8 @@ void ThermoinoPID::setParams(float Kp, float Ki, float Kd) {
     this->lastOutput = constrain(this->lastOutput, this->outMin, this->outMax);
 //    const float Ki = Ti == 0.0f ? 0.0f : Kp / Ti;
 //    const float Kd = Kp * Td;
-    this->A0_noint = Kp + (Kd / period);
-    this->A0 = this->A0_noint + (Ki * period);
+    this->A0_nonintegral = Kp + (Kd / period);
+    this->A0_integral = (Ki * period);
     this->A1 = -Kp - (2 * (Kd / period));
     this->A2 = Kd / period;
 }

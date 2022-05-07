@@ -15,6 +15,8 @@ public:
 
     float getConstrainedValue();
 
+    void setValue(float val);
+
     float *valPtr();
 
     void setOutputLimits(float min, float max);
@@ -26,11 +28,10 @@ public:
 
 private:
 
-    float error, lastError, outMin, outMax, noIntOffset, lastOutput;
+    float error, lastError, outMin, outMax, noIntOffset, lastOutput, lastOutputIntegral;
 
-    float A0;
-    // A0 without integral part - anti-windup
-    float A0_noint;
+    float A0_integral;
+    float A0_nonintegral;
     float A1;
     float A2;
 
