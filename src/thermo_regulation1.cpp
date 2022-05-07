@@ -6,7 +6,9 @@
 #include "Thermoino.h"
 #include "pid.h"
 
-#define USE_SIMULATION 1
+#define USE_SIMULATION 0
+#define USE_BOILER_REF_ADJUST 0
+#define USE_CIRCUIT_RELAY_FEED_FWD 0
 
 #if USE_DHT_ROOM_TEMP && !USE_SIMULATION
 #include <DHT.h>
@@ -25,13 +27,13 @@ Scheduler runner;
 // periodic task to read state of buttons - might enable other tasks, if needed
 Task t_stateUpdate_readButtons(1e2, -1, &stateUpdate_readButtons_cb, &runner);
 // one-shot task to compute desired vent angle and relay status - enabled if status changes require recalculation
-Task t_stateUpdate_angleAndRelay(uint64_t(1e3 / simulationSpeed), 1, &stateUpdate_angleAndRelay_cb, &runner);
+Task t_stateUpdate_angleAndRelay(uint64_t(10e3 / simulationSpeed), 1, &stateUpdate_angleAndRelay_cb, &runner);
 // periodic task to read sensors - temperatures, might enable other tasks
 Task t_stateUpdate_readSensors(uint64_t(2e3 / simulationSpeed), -1, &stateUpdate_readSensors_cb, &runner);
 // periodic task for hot water probe - allows relay to let some water through once in a while to allow for better measurement
 //Task t_stateUpdate_hotWaterProbe(uint64_t(1e4 / simulationSpeed), -1, &stateUpdate_hotWaterProbe_cb, &runner);
 // periodic task for PID heat control
-Task t_stateUpdate_heatNeeded(uint64_t(1e4 / simulationSpeed), -1, &stateUpdate_heatNeeded_cb, &runner);
+Task t_stateUpdate_heatNeeded(uint64_t(10e3 / simulationSpeed), -1, &stateUpdate_heatNeeded_cb, &runner);
 // periodic task to update state based on instructions from the Serial port
 Task t_stateUpdate_serialReader(uint64_t(1e3 / simulationSpeed), -1, &stateUpdate_serialReader_cb, &runner);
 // one-shot effect task to update desired settings of the vent angle and circuit relay - triggered by other tasks
@@ -73,12 +75,12 @@ Configuration config = {
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
     // following params were for sim x10 without rescaling
-    .pidKp = 20.0f,
-    .pidKi = 0.05f,
+    .pidKp = 8.0f,
+    .pidKi = 0.015f,
     .pidKd = 8.00f,
     // K_u = 0.5 (maybe less), T_u = 800s
-    .pidRelayKp = 20.0f,
-    .pidRelayKi = 0.005f,
+    .pidRelayKp = 60.0f,
+    .pidRelayKi = 0.002f,
     .pidRelayKd = 0.0f,
     .settingsSelected = -1
 };
@@ -105,11 +107,11 @@ bool hotWaterProbeEnforced = false;
 //uint8_t hotWaterProbeCycles = 0;
 
 // K_u = 100 (maybe less), T_u = 30s (pretty stable)
-ThermoinoPID pidBoiler(t_stateUpdate_readSensors.getInterval() / 1000);
+ThermoinoPID pidBoiler(t_stateUpdate_angleAndRelay.getInterval() / 1000);
 //sTune tuner(&pidBoilerIn, &pidBoilerOut, sTune::NoOvershoot_PID, sTune::directIP, sTune::printOFF);
 
 // K_u = 0.5f, T_u = 280s
-ThermoinoPID pidHeatPWM(t_stateUpdate_readSensors.getInterval() / 1000);
+ThermoinoPID pidHeatPWM(t_stateUpdate_heatNeeded.getInterval() / 1000);
 
 uint8_t deviceAddress;
 
@@ -153,11 +155,11 @@ void setup()
 
     pidBoiler.setOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
     pidBoiler.setParams(config.pidKp, config.pidKi, config.pidKd);
-    pidHeatPWM.setIntegralMaxError(3.0f);
+    pidBoiler.setIntegralMaxError(5.0f);
 
     pidHeatPWM.setOutputLimits(0.0f, float(relayWindowFragments));
     pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
-    pidHeatPWM.setIntegralMaxError(1.5f);
+    pidHeatPWM.setIntegralMaxError(3.0f);
 
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
@@ -265,12 +267,19 @@ void stateUpdate_simulator_cb()
 uint8_t heatNeededCurrentFragment = relayWindowFragments * 0.8f;
 uint8_t heatPwmAtWindowStart = 0;
 uint8_t prevHeatPwmAtWindowStart = 0;
+
+#if USE_BOILER_REF_ADJUST
 int8_t onEdgeCounter = 0;
+#endif
 
 void stateUpdate_heatNeeded_cb()
 {
     const bool lastHeatNeeded = heatNeeded;
     heatNeededCurrentFragment++;
+
+    if (!underheating && config.settingsSelected != MENU_POS_HEAT_MANUAL) {
+        pidHeatPWM.compute(roomTemp, (float) config.refTempRoom);
+    }
     // breaking edge (fragment) of a window
     if (heatNeededCurrentFragment >= relayWindowFragments) {
         heatNeededCurrentFragment = 0;
@@ -288,6 +297,7 @@ void stateUpdate_heatNeeded_cb()
             heatPwmAtWindowStart = relayWindowFragments - 6;
         }
 
+#if USE_BOILER_REF_ADJUST
         // if the heatPwm has been high for long enough, step up boiler ref. temperature
         if (
             prevHeatPwmAtWindowStart > (relayWindowFragments - 2) &&
@@ -313,6 +323,7 @@ void stateUpdate_heatNeeded_cb()
             config.refTempBoiler--;
             notifySettingsChanged();
         }
+#endif
     }
 #if PRINT_SERIAL_UPDATES
     Serial.print(F("DRQ:HPWM:"));
@@ -370,7 +381,7 @@ void stateUpdate_readSensors_cb()
         } else {
             roomTemp = lastReading;
         }
-        roomHumidity = digitalThermometer.readHumidity(false);
+//        roomHumidity = digitalThermometer.readHumidity(false);
 #else
         roomTemp = readTemp(ROOM_THERM_PIN);
 #endif
@@ -402,12 +413,6 @@ void stateUpdate_readSensors_cb()
 //        case tuner.runPid:
 //            break;
 //    }
-    if (config.settingsSelected != MENU_POS_VENT_MANUAL) {
-        pidBoiler.compute(boilerTemp, (float)config.refTempBoiler);
-    }
-    if (!underheating && config.settingsSelected != MENU_POS_HEAT_MANUAL) {
-        pidHeatPWM.compute(roomTemp, (float) config.refTempRoom);
-    }
 
     if((boilerTemp != lastBoilerTemp) || (roomTemp != lastRoomTemp)) {
         notifyTask(&t_stateUpdate_angleAndRelay, false);
@@ -432,7 +437,9 @@ void stateUpdate_angleAndRelay_cb()
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_ENTRY("stateUpdate_angleAndRelay");
 #endif
-
+    if (config.settingsSelected != MENU_POS_VENT_MANUAL) {
+        pidBoiler.compute(boilerTemp, (float)config.refTempBoiler);
+    }
 //    const float boilerDelta = boilerTemp - float(heatNeeded ? config.refTempBoiler : config.refTempBoilerIdle);
     overheating = (overheating && (boilerTemp - config.overheatingLimit >= (debounceLimitC / 2))) ||
                   (boilerTemp - config.overheatingLimit >= -(debounceLimitC / 2));
@@ -451,7 +458,8 @@ void stateUpdate_angleAndRelay_cb()
     } else if (config.settingsSelected == MENU_POS_SERVO_MAX) {
         angle = 99;
     } else {
-        angle = (getVentAngleFromPID() + (7 * angle)) / 8;
+        angle = getVentAngleFromPID();
+//        angle = (getVentAngleFromPID() + (7 * angle)) / 8;
     }
 
     if (
@@ -474,6 +482,7 @@ void stateUpdate_angleAndRelay_cb()
 }
 
 uint8_t getVentAngleFromPID() {
+#if USE_CIRCUIT_RELAY_FEED_FWD
     const uint16_t nextHeatPWM = lround(double(pidHeatPWM.getConstrainedValue()));
     const int16_t stopHeatingIn = heatPwmAtWindowStart - heatNeededCurrentFragment;
     const int16_t newWindowIn = relayWindowFragments - heatNeededCurrentFragment;
@@ -491,7 +500,9 @@ uint8_t getVentAngleFromPID() {
             15.0f : // * float(newWindowIn + 1) :
             // otherwise
             0.0f;
-
+#else
+    const float feedForward = 0.0f;
+#endif
     return constrain(
         int(*pidBoiler.valPtr()) + feedForward,
         0.0f + boilerPidOutOffset,

@@ -43,22 +43,10 @@
 #define DEBUG_SER_PRINT_LN(x) do { Serial.println(x); } while(0)
 #endif
 
-#define MENU_POS_VENT_MANUAL 0
-#define MENU_POS_HEAT_MANUAL 1
-#define MENU_POS_SERVO_MIN 6
-#define MENU_POS_SERVO_MAX 7
-
 #define relay_or_override() config.circuitRelayForced == 0 ? circuitRelay : config.circuitRelayForced == 1
 
 #define MAX_BUFFER_LEN 20
 extern char buffer[];
-
-typedef struct ConfigMenuItem {
-    const char *name;
-    void* param;
-    void* (*handler)(void* param, int8_t diff);
-    void (*formatter)(void* param, Print &print, void *value);
-} ConfigMenuItem_t;
 
 const float debounceLimitC = 2.0f;
 

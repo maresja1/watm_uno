@@ -2,30 +2,30 @@
 
 struct ConfigMenuItem bufferMenuItem;
 
-void *menuHandlerVent(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerHeating(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerBoiler(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerRoom(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerRoomTempAdjust(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerCircuitRelayForced(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerServoMin(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerServoMax(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerOverheatingLimit(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerUnderheatingLimit(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerDeltaTempPoly0(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerDeltaTempPoly1(__attribute__((unused)) void *param, int8_t diff);
+const void *menuHandlerVent(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerHeating(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerBoiler(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerRoom(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerRoomTempAdjust(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerCircuitRelayForced(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerServoMin(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerServoMax(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerOverheatingLimit(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerUnderheatingLimit(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerDeltaTempPoly0(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerDeltaTempPoly1(__attribute__((unused)) const void *param, int8_t diff);
 void *handlePIDValueConfig(float *floatVal, int8_t diff);
-void *menuHandlerPID_p(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerPID_i(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerPID_d(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerRelayPID_p(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerRelayPID_i(__attribute__((unused)) void *param, int8_t diff);
-void *menuHandlerRelayPID_d(__attribute__((unused)) void *param, int8_t diff);
+const void *menuHandlerPID_p(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerPID_i(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerPID_d(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerRelayPID_p(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerRelayPID_i(__attribute__((unused)) const void *param, int8_t diff);
+const void *menuHandlerRelayPID_d(__attribute__((unused)) const void *param, int8_t diff);
 
-void menuFormatterUInt8Value(__attribute__((unused)) void *param, Print &print, void *value);
-void menuFormatterInt16Value(__attribute__((unused)) void *param, Print &print, void *value);
-void menuFormatterFloatValue(__attribute__((unused)) void *param, Print &print, void *value);
-void menuFormatterCircuitOverride(__attribute__((unused)) void *param, Print &print, void *value);
+void menuFormatterUInt8Value(__attribute__((unused)) const void *param, Print &print, const void *value);
+void menuFormatterInt16Value(__attribute__((unused)) const void *param, Print &print, const void *value);
+void menuFormatterFloatValue(__attribute__((unused)) const void *param, Print &print, const void *value);
+void menuFormatterCircuitOverride(__attribute__((unused)) const void *param, Print &print, const void *value);
 
 const char menuManual[] PROGMEM = "Manual %";
 const char menuManualHeating[] PROGMEM = "Manual H %";
@@ -168,7 +168,7 @@ const struct ConfigMenuItem *getMenu(int16_t itemIndex)
     return &bufferMenuItem;
 }
 
-void *menuHandlerVent(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerVent(__attribute__((unused)) const void *param, int8_t diff)
 {
     angle += diff * 5;
     if (angle < 0 || angle > 200 /* overflow */) {
@@ -184,37 +184,39 @@ void *menuHandlerVent(__attribute__((unused)) void *param, int8_t diff)
     return &angle;
 }
 
-void *menuHandlerHeating(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerHeating(__attribute__((unused)) const void *param, int8_t diff)
 {
-    float *pidRelayOut = pidHeatPWM.valPtr();
-    if (*pidRelayOut < 0) {
-        *pidRelayOut = 0.0f;
+    float pidRelayOut = pidHeatPWM.getConstrainedValue();
+    pidRelayOut += diff;
+    if (pidRelayOut < 0.0f) {
+        pidRelayOut = 0.0f;
     }
-    if (*pidRelayOut  > 10) {
-        *pidRelayOut = 10.0f;
+    if (pidRelayOut  > 10.0f) {
+        pidRelayOut = 10.0f;
     }
-    return pidRelayOut;
+    pidHeatPWM.setValue(pidRelayOut);
+    return pidHeatPWM.valPtr();
 }
 
-void *menuHandlerBoiler(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerBoiler(__attribute__((unused)) const void *param, int8_t diff)
 {
     config.refTempBoiler += diff;
     return &config.refTempBoiler;
 }
 
-void *menuHandlerRoom(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerRoom(__attribute__((unused)) const void *param, int8_t diff)
 {
     config.refTempRoom += float(diff) * 0.2f;
     return &config.refTempRoom;
 }
 
-void *menuHandlerRoomTempAdjust(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerRoomTempAdjust(__attribute__((unused)) const void *param, int8_t diff)
 {
     config.roomTempAdjust += float(diff) * 0.1f;
     return &config.roomTempAdjust;
 }
 
-void *menuHandlerCircuitRelayForced(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerCircuitRelayForced(__attribute__((unused)) const void *param, int8_t diff)
 {
     if (diff != 0) {
         config.circuitRelayForced = (config.circuitRelayForced + 1) % 3;
@@ -222,37 +224,37 @@ void *menuHandlerCircuitRelayForced(__attribute__((unused)) void *param, int8_t 
     return &config.circuitRelayForced;
 }
 
-void *menuHandlerServoMin(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerServoMin(__attribute__((unused)) const void *param, int8_t diff)
 {
     config.servoMin += int16_t(diff);
     return &config.servoMin;
 }
 
-void *menuHandlerServoMax(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerServoMax(__attribute__((unused)) const void *param, int8_t diff)
 {
     config.servoMax += int16_t(diff);
     return &config.servoMax;
 }
 
-void *menuHandlerOverheatingLimit(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerOverheatingLimit(__attribute__((unused)) const void *param, int8_t diff)
 {
     config.overheatingLimit += diff;
     return &config.overheatingLimit;
 }
 
-void *menuHandlerUnderheatingLimit(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerUnderheatingLimit(__attribute__((unused)) const void *param, int8_t diff)
 {
     config.underheatingLimit += diff;
     return &config.underheatingLimit;
 }
 
-void *menuHandlerDeltaTempPoly0(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerDeltaTempPoly0(__attribute__((unused)) const void *param, int8_t diff)
 {
     config.deltaTempPoly0 += float(diff) * 0.005f;
     return &config.deltaTempPoly0;
 }
 
-void *menuHandlerDeltaTempPoly1(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerDeltaTempPoly1(__attribute__((unused)) const void *param, int8_t diff)
 {
     config.deltaTempPoly1 += float(diff) * 0.005f;
     return &config.deltaTempPoly1;
@@ -272,37 +274,37 @@ void *handlePIDValueConfig(float *floatVal, int8_t diff)
     return floatVal;
 }
 
-void *menuHandlerPID_p(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerPID_p(__attribute__((unused)) const void *param, int8_t diff)
 {
     return handlePIDValueConfig(&config.pidKp, diff);
 }
 
-void *menuHandlerPID_i(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerPID_i(__attribute__((unused)) const void *param, int8_t diff)
 {
     return handlePIDValueConfig(&config.pidKi, diff);
 }
 
-void *menuHandlerPID_d(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerPID_d(__attribute__((unused)) const void *param, int8_t diff)
 {
     return handlePIDValueConfig(&config.pidKd, diff);
 }
 
-void *menuHandlerRelayPID_p(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerRelayPID_p(__attribute__((unused)) const void *param, int8_t diff)
 {
     return handlePIDValueConfig(&config.pidRelayKp, diff);
 }
 
-void *menuHandlerRelayPID_i(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerRelayPID_i(__attribute__((unused)) const void *param, int8_t diff)
 {
     return handlePIDValueConfig(&config.pidRelayKi, diff);
 }
 
-void *menuHandlerRelayPID_d(__attribute__((unused)) void *param, int8_t diff)
+const void *menuHandlerRelayPID_d(__attribute__((unused)) const void *param, int8_t diff)
 {
     return handlePIDValueConfig(&config.pidRelayKd, diff);
 }
 
-void menuFormatterUInt8Value(__attribute__((unused)) void *param, Print &print, void *value)
+void menuFormatterUInt8Value(__attribute__((unused)) const void *param, Print &print, const void *value)
 {
     lcd.cursor();
     print.print("value: ");
@@ -311,7 +313,7 @@ void menuFormatterUInt8Value(__attribute__((unused)) void *param, Print &print, 
     buffer[0] = '\0';
 }
 
-void menuFormatterInt16Value(__attribute__((unused)) void *param, Print &print, void *value)
+void menuFormatterInt16Value(__attribute__((unused)) const void *param, Print &print, const void *value)
 {
     lcd.cursor();
     print.print("value: ");
@@ -320,7 +322,7 @@ void menuFormatterInt16Value(__attribute__((unused)) void *param, Print &print, 
     buffer[0] = '\0';
 }
 
-//void menuFormatterInt8Value(__attribute__((unused)) void *param, Print &print, void *value)
+//void menuFormatterInt8Value(__attribute__((unused)) const void *param, Print &print, const void *value)
 //{
 //    lcd.cursor();
 //    print.print("value: ");
@@ -329,7 +331,7 @@ void menuFormatterInt16Value(__attribute__((unused)) void *param, Print &print, 
 //    buffer[0] = '\0';
 //}
 
-void menuFormatterFloatValue(__attribute__((unused)) void *param, Print &print, void *value)
+void menuFormatterFloatValue(__attribute__((unused)) const void *param, Print &print, const void *value)
 {
     lcd.cursor();
     print.print("value: ");
@@ -343,7 +345,7 @@ void menuFormatterFloatValue(__attribute__((unused)) void *param, Print &print, 
     buffer[0] = '\0';
 }
 
-void menuFormatterCircuitOverride(__attribute__((unused)) void *param, Print &print, void *value)
+void menuFormatterCircuitOverride(__attribute__((unused)) const void *param, Print &print, const void *value)
 {
     switch (*(int8_t *) value) {
         case 0:
