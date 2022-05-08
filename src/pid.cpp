@@ -79,10 +79,26 @@ void ThermoinoPID::setParams(float Kp, float Ki, float Kd) {
     this->lastOutput = constrain(this->lastOutput, this->outMin, this->outMax);
 //    const float Ki = Ti == 0.0f ? 0.0f : Kp / Ti;
 //    const float Kd = Kp * Td;
-    this->A0_nonintegral = Kp + (Kd / period);
-    this->A0_integral = (Ki * period);
-    this->A1 = -Kp - (2 * (Kd / period));
-    this->A2 = Kd / period;
+    float A0_nonintegral = Kp + (Kd / period);
+    float A0_integral = (Ki * period);
+    float A1 = -Kp - (2 * (Kd / period));
+    float A2 = Kd / period;
+    // the incremental computation would be broken, if the lastOutput is not reset
+    // only do that if the params actually changed
+    if (
+        A0_nonintegral != this->A0_nonintegral ||
+        A1 != this->A1 ||
+        A2 != this->A2
+    ) {
+        this->A0_nonintegral = A0_nonintegral;
+        this->A1 = A1;
+        this->A2 = A2;
+        this->lastOutput = 0;
+    }
+    if (A0_integral != this->A0_integral) {
+        this->A0_integral = A0_integral;
+        this->lastOutputIntegral = 0;
+    }
 }
 
 void ThermoinoPID::setOutputLimits(float min, float max) {
