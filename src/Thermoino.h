@@ -64,11 +64,11 @@ struct Configuration {
     float deltaTempPoly0;
     float roomTempAdjust;
     float pidKp;
-    float pidKi;
-    float pidKd;
+    float pidTi;
+    float pidTd;
     float pidRelayKp;
-    float pidRelayKi;
-    float pidRelayKd;
+    float pidRelayTi;
+    float pidRelayTd;
     int16_t settingsSelected;
 };
 

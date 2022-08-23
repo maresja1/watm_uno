@@ -17,23 +17,20 @@ public:
 
     void setValue(float val);
 
-    float *valPtr();
-
     void setOutputLimits(float min, float max);
 
     // if abs(error) higher than this, integral part is omitted to avoid windup
-    void setIntegralMaxError(float offset);
+    void setIntegralLimit(float offset);
 
     void setParams(float Kp, float Ki, float Kd);
 
 private:
 
-    float error, lastError, outMin, outMax, noIntOffset, lastOutput, lastOutputIntegral;
+    float error, outMin, outMax, integralLimit, lastOutput, lastInput, integral;
 
-    float A0_integral;
-    float A0_nonintegral;
-    float A1;
-    float A2;
+    float Kp;
+    float Ti;
+    float Td;
 
     uint32_t period;
 }; // class ThermoinoPID

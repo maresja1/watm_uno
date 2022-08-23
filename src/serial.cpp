@@ -5,7 +5,7 @@
 
 #include "Thermoino.h"
 
-#define USE_SOFT_SERIAL 1
+#define USE_SOFT_SERIAL 0
 
 const uint8_t serialLineBufferCapacity = 63;
 uint8_t serialLineBufferIdx = 0;
@@ -105,19 +105,19 @@ void stateUpdate_serialReader_cb()
                 config.pidKp = strtod(valueBuffer.c_str(), nullptr);
                 notifySettingsChanged();
             OR_PARSE(CMD_PID_BL_Ki)
-                config.pidKi = strtod(valueBuffer.c_str(), nullptr);
+                config.pidTi = strtod(valueBuffer.c_str(), nullptr);
                 notifySettingsChanged();
             OR_PARSE(CMD_PID_BL_Kd)
-                config.pidKd = strtod(valueBuffer.c_str(), nullptr);
+                config.pidTd = strtod(valueBuffer.c_str(), nullptr);
                 notifySettingsChanged();
             OR_PARSE(CMD_PID_CR_Kp)
                 config.pidRelayKp = strtod(valueBuffer.c_str(), nullptr);
                 notifySettingsChanged();
             OR_PARSE(CMD_PID_CR_Ki)
-                config.pidRelayKi = strtod(valueBuffer.c_str(), nullptr);
+                config.pidRelayTi = strtod(valueBuffer.c_str(), nullptr);
                 notifySettingsChanged();
             OR_PARSE(CMD_PID_CR_Kd)
-                config.pidRelayKd = strtod(valueBuffer.c_str(), nullptr);
+                config.pidRelayTd = strtod(valueBuffer.c_str(), nullptr);
                 notifySettingsChanged();
             OR_PARSE(CMD_MODE)
                 if (valueBuffer.equals("A")) {
@@ -152,15 +152,15 @@ void serialPrintConfig() {
     Serial.print(F("DRQ:PID_BL_Kp:"));
     Serial.println(config.pidKp, 4);
     Serial.print(F("DRQ:PID_BL_Ki:"));
-    Serial.println(config.pidKi, 4);
+    Serial.println(config.pidTi, 4);
     Serial.print(F("DRQ:PID_BL_Kd:"));
-    Serial.println(config.pidKd, 4);
+    Serial.println(config.pidTd, 4);
     Serial.print(F("DRQ:PID_CR_Kp:"));
     Serial.println(config.pidRelayKp, 4);
     Serial.print(F("DRQ:PID_CR_Ki:"));
-    Serial.println(config.pidRelayKi, 4);
+    Serial.println(config.pidRelayTi, 4);
     Serial.print(F("DRQ:PID_CR_Kd:"));
-    Serial.println(config.pidRelayKd, 4);
+    Serial.println(config.pidRelayTd, 4);
     Serial.print(F("DRQ:HPWM:"));
     Serial.println(lround(double(pidHeatPWM.getConstrainedValue())));
 }

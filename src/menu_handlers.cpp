@@ -184,9 +184,10 @@ const void *menuHandlerVent(__attribute__((unused)) const void *param, int8_t di
     return &angle;
 }
 
+float pidRelayOut;
 const void *menuHandlerHeating(__attribute__((unused)) const void *param, int8_t diff)
 {
-    float pidRelayOut = pidHeatPWM.getConstrainedValue();
+    pidRelayOut = pidHeatPWM.getConstrainedValue();
     pidRelayOut += diff;
     if (pidRelayOut < 0.0f) {
         pidRelayOut = 0.0f;
@@ -195,7 +196,7 @@ const void *menuHandlerHeating(__attribute__((unused)) const void *param, int8_t
         pidRelayOut = 10.0f;
     }
     pidHeatPWM.setValue(pidRelayOut);
-    return pidHeatPWM.valPtr();
+    return &pidRelayOut;
 }
 
 const void *menuHandlerBoiler(__attribute__((unused)) const void *param, int8_t diff)
@@ -281,12 +282,12 @@ const void *menuHandlerPID_p(__attribute__((unused)) const void *param, int8_t d
 
 const void *menuHandlerPID_i(__attribute__((unused)) const void *param, int8_t diff)
 {
-    return handlePIDValueConfig(&config.pidKi, diff);
+    return handlePIDValueConfig(&config.pidTi, diff);
 }
 
 const void *menuHandlerPID_d(__attribute__((unused)) const void *param, int8_t diff)
 {
-    return handlePIDValueConfig(&config.pidKd, diff);
+    return handlePIDValueConfig(&config.pidTd, diff);
 }
 
 const void *menuHandlerRelayPID_p(__attribute__((unused)) const void *param, int8_t diff)
@@ -296,12 +297,12 @@ const void *menuHandlerRelayPID_p(__attribute__((unused)) const void *param, int
 
 const void *menuHandlerRelayPID_i(__attribute__((unused)) const void *param, int8_t diff)
 {
-    return handlePIDValueConfig(&config.pidRelayKi, diff);
+    return handlePIDValueConfig(&config.pidRelayTi, diff);
 }
 
 const void *menuHandlerRelayPID_d(__attribute__((unused)) const void *param, int8_t diff)
 {
-    return handlePIDValueConfig(&config.pidRelayKd, diff);
+    return handlePIDValueConfig(&config.pidRelayTd, diff);
 }
 
 void menuFormatterUInt8Value(__attribute__((unused)) const void *param, Print &print, const void *value)

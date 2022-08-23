@@ -75,13 +75,13 @@ Configuration config = {
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
     // following params were for sim x10 without rescaling
-    .pidKp = 8.0f,
-    .pidKi = 0.015f,
-    .pidKd = 8.00f,
+    .pidKp = 25.0f,
+    .pidTi = 120.0f,
+    .pidTd = 8.00f,
     // K_u = 0.5 (maybe less), T_u = 800s
     .pidRelayKp = 60.0f,
-    .pidRelayKi = 0.002f,
-    .pidRelayKd = 0.0f,
+    .pidRelayTi = 720.0f,
+    .pidRelayTd = 0.0f,
     .settingsSelected = -1
 };
 
@@ -107,11 +107,11 @@ bool hotWaterProbeEnforced = false;
 //uint8_t hotWaterProbeCycles = 0;
 
 // K_u = 100 (maybe less), T_u = 30s (pretty stable)
-ThermoinoPID pidBoiler(t_stateUpdate_angleAndRelay.getInterval() / 1000);
+ThermoinoPID pidBoiler(t_stateUpdate_angleAndRelay.getInterval() / 5000);
 //sTune tuner(&pidBoilerIn, &pidBoilerOut, sTune::NoOvershoot_PID, sTune::directIP, sTune::printOFF);
 
 // K_u = 0.5f, T_u = 280s
-ThermoinoPID pidHeatPWM(t_stateUpdate_heatNeeded.getInterval() / 1000);
+ThermoinoPID pidHeatPWM(t_stateUpdate_heatNeeded.getInterval() / 5000);
 
 uint8_t deviceAddress;
 
@@ -154,12 +154,12 @@ void setup()
 #endif
 
     pidBoiler.setOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
-    pidBoiler.setParams(config.pidKp, config.pidKi, config.pidKd);
-    pidBoiler.setIntegralMaxError(5.0f);
+    pidBoiler.setParams(config.pidKp, config.pidTi, config.pidTd);
+    pidBoiler.setIntegralLimit(1.0f);
 
     pidHeatPWM.setOutputLimits(0.0f, float(relayWindowFragments));
-    pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
-    pidHeatPWM.setIntegralMaxError(3.0f);
+    pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayTi, config.pidRelayTd);
+    pidHeatPWM.setIntegralLimit(1.0f);
 
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");
@@ -191,6 +191,7 @@ void loop()
     serialLineBufferLoop();
 }
 
+#if USE_SIMULATION
 float simulate_radiatorPower(float deltaTemp)
 {
 //    int16_t radiatorPowerDT30 = 849;
@@ -202,13 +203,12 @@ float simulate_radiatorPower(float deltaTemp)
     return max(0.0f, (0.264f * deltaTemp * deltaTemp) + 20.38f * deltaTemp);
 }
 
-#if USE_SIMULATION
 const int8_t radiatorCount = 10;
 const int8_t boilerVolume = 36;
 const uint32_t boilerPower = 18000;
 #define waterHeatCapacity 4180.0f
 const uint32_t heatedAirOtherCapacity = 4000000;
-const int8_t outsideTemp = 10;
+const int8_t outsideTemp = 15;
 const int16_t circuitVolume = int16_t(float(radiatorCount) * 5.8f);
 
 float circuitTemp = 40;
@@ -229,9 +229,10 @@ void stateUpdate_simulator_cb()
     const float boilerAsRadiator = simulate_radiatorPower(boilerTemp - roomTemp) * 2;
     const float roomHeat = circuitPower + boilerAsRadiator - insulationLost;
 
-    const float boilerPowerAngle = min(
-        max(lastPower - (1000.0f * dTime), float(boilerPower * currAngle) / 100),
-        lastPower + (1000.0f * dTime)
+    const float boilerPowerAngle = constrain(
+        float(boilerPower * currAngle) / 100,
+        lastPower - (60.0f * dTime),
+        lastPower + (50.0f * dTime)
     );
     lastPower = boilerPowerAngle;
 
@@ -406,9 +407,9 @@ void stateUpdate_readSensors_cb()
 //        case tuner.sample:
 //            break;
 //        case tuner.tunings:
-//            tuner.GetAutoTunings(&config.pidKp, &config.pidKi, &config.pidKd);
+//            tuner.GetAutoTunings(&config.pidKp, &config.pidTi, &config.pidTd);
 //            pidBoiler.SetMode(QuickPID::Control::timer);
-//            pidBoiler.SetTunings(config.pidKp, config.pidKi, config.pidKd);
+//            pidBoiler.SetTunings(config.pidKp, config.pidTi, config.pidTd);
 //            break;
 //        case tuner.runPid:
 //            break;
@@ -500,14 +501,17 @@ uint8_t getVentAngleFromPID() {
             15.0f : // * float(newWindowIn + 1) :
             // otherwise
             0.0f;
-#else
-    const float feedForward = 0.0f;
 #endif
+
+#if USE_CIRCUIT_RELAY_FEED_FWD
     return constrain(
-        int(*pidBoiler.valPtr()) + feedForward,
+       pidBoiler.getConstrainedValue() + feedForward,
         0.0f + boilerPidOutOffset,
         99.0f + boilerPidOutOffset
     ) - boilerPidOutOffset;
+#else
+    return uint8_t(pidBoiler.getConstrainedValue() - boilerPidOutOffset);
+#endif
 }
 
 void effect_refreshServoAndRelay_cb()
@@ -571,8 +575,8 @@ void effect_processSettings_cb()
     DEBUG_TASK_ENTRY("stateUpdate_readButtons");
 #endif
     eepromUpdate();
-    pidBoiler.setParams(config.pidKp, config.pidKi, config.pidKd);
-    pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayKi, config.pidRelayKd);
+    pidBoiler.setParams(config.pidKp, config.pidTi, config.pidTd);
+    pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayTi, config.pidRelayTd);
 #if PRINT_SERIAL_UPDATES
     serialPrintConfig();
 #endif
