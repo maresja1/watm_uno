@@ -75,11 +75,11 @@ Configuration config = {
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
     // following params were for sim x10 without rescaling
-    .pidKp = 25.0f,
-    .pidTi = 120.0f,
-    .pidTd = 8.00f,
+    .pidKp = 4.0f,
+    .pidTi = 60.0f,
+    .pidTd = 0.00f,
     // K_u = 0.5 (maybe less), T_u = 800s
-    .pidRelayKp = 60.0f,
+    .pidRelayKp = 30.0f,
     .pidRelayTi = 720.0f,
     .pidRelayTd = 0.0f,
     .settingsSelected = -1
@@ -115,7 +115,7 @@ ThermoinoPID pidHeatPWM(t_stateUpdate_heatNeeded.getInterval() / 5000);
 
 uint8_t deviceAddress;
 
-const float boilerPidOutOffset = -50.0f;
+const float boilerPidOutOffset = 0.0f;
 
 void setup()
 {
@@ -155,11 +155,11 @@ void setup()
 
     pidBoiler.setOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
     pidBoiler.setParams(config.pidKp, config.pidTi, config.pidTd);
-    pidBoiler.setIntegralLimit(1.0f);
+    pidBoiler.setIntegralLimit(10.0f);
 
     pidHeatPWM.setOutputLimits(0.0f, float(relayWindowFragments));
     pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayTi, config.pidRelayTd);
-    pidHeatPWM.setIntegralLimit(1.0f);
+    pidHeatPWM.setIntegralLimit(5.0f);
 
     sendCurrentStateToRelay(circuitRelay);
     lcd.write(".");

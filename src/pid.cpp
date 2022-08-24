@@ -38,10 +38,10 @@ void ThermoinoPID::compute(const float input, const float setPoint) {
     const float derivative = (-1.0f * this->Kp * this->Td * (input - this->lastInput)) / float(period);
 
     // anti windup
-    if ((proportional + this->integral) > (outMax * this->integralLimit)) {
-        this->integral = (outMax * this->integralLimit) - proportional;
-    } else if ((proportional + this->integral) < (outMin * this->integralLimit)) {
-        this->integral = (outMin * this->integralLimit) - proportional;
+    if ((proportional + this->integral) > (outMax + this->integralLimit)) {
+        this->integral = (outMax + this->integralLimit) - proportional;
+    } else if ((proportional + this->integral) < (outMin - this->integralLimit)) {
+        this->integral = (outMin - this->integralLimit) - proportional;
     }
 
     this->lastOutput = proportional + derivative;
@@ -54,14 +54,11 @@ float ThermoinoPID::getConstrainedValue() {
 
 void ThermoinoPID::setValue(float val) {
     this->lastOutput = val;
-    this->error = 0;
-    this->integral = 0.0f;
-    this->lastInput = NAN;
 }
 
 void ThermoinoPID::setParams(float Kp, float Ti, float Td) {
-    // reset state
-    this->setValue(constrain(this->lastOutput, this->outMin, this->outMax));
+    // rescale integral
+    this->integral = (this->integral * this->Ti) / Ti;
 
     this->Kp = Kp;
     this->Ti = Ti;
