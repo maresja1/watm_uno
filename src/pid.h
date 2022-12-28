@@ -11,7 +11,7 @@ class ThermoinoPID {
 public:
     explicit ThermoinoPID(uint32_t period);
 
-    void compute(float input, float setPoint);
+    void compute(float input, float setPoint, Stream * print = nullptr);
 
     float getConstrainedValue();
 

@@ -24,7 +24,7 @@ ThermoinoPID::ThermoinoPID(uint32_t period)
     ThermoinoPID::setOutputLimits(0.0f, 100.0f);
 }
 
-void ThermoinoPID::compute(const float input, const float setPoint) {
+void ThermoinoPID::compute(const float input, const float setPoint, Stream * const print) {
     if (isnan(this->lastInput)) {
         this->lastInput = input;
     }
@@ -44,13 +44,13 @@ void ThermoinoPID::compute(const float input, const float setPoint) {
         this->integral = (outMin - this->integralLimit) - proportional;
     }
 
-//    Serial.print(F("PID:"));
-//    Serial.print(proportional, 2);
-//    Serial.print(",");
-//    Serial.print(derivative, 2);
-//    Serial.print(",");
-//    Serial.print(this->integral, 2);
-//    Serial.println(".");
+    if (print != nullptr) {
+        print->print(proportional, 2);
+        print->print(",");
+        print->print(derivative, 2);
+        print->print(",");
+        print->print(this->integral, 2);
+    }
     this->lastOutput = proportional + derivative;
     this->lastInput = input;
 }
