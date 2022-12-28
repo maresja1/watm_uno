@@ -75,12 +75,12 @@ Configuration config = {
     .roomTempAdjust = 0.0f,
     // K_u = 100 (maybe less), T_u = 30s (pretty stable)
     // following params were for sim x10 without rescaling
-    .pidKp = 4.0f,
-    .pidTi = 60.0f,
+    .pidKp = 3.0f,
+    .pidTi = 120.0f,
     .pidTd = 0.00f,
     // K_u = 0.5 (maybe less), T_u = 800s
-    .pidRelayKp = 30.0f,
-    .pidRelayTi = 720.0f,
+    .pidRelayKp = 10.0f,
+    .pidRelayTi = 570.0f,
     .pidRelayTd = 0.0f,
     .settingsSelected = -1
 };
@@ -780,7 +780,7 @@ uint8_t processSettings()
     return stateChanged;
 }
 
-#define EEPROM_MAGIC 0xDEADBE01
+#define EEPROM_MAGIC 0xDEADBE02
 
 void eepromInit()
 {
