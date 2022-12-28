@@ -280,7 +280,9 @@ void stateUpdate_heatNeeded_cb()
     heatNeededCurrentFragment++;
 
     if (!underheating && config.settingsSelected != MENU_POS_HEAT_MANUAL) {
-        pidHeatPWM.compute(roomTemp, (float) config.refTempRoom);
+        Serial.print(F("DRQ:H_PID:"));
+        pidHeatPWM.compute(roomTemp, (float) config.refTempRoom, &Serial);
+        Serial.println();
     }
     // breaking edge (fragment) of a window
     if (heatNeededCurrentFragment >= relayWindowFragments) {
@@ -440,7 +442,9 @@ void stateUpdate_angleAndRelay_cb()
     DEBUG_TASK_ENTRY("stateUpdate_angleAndRelay");
 #endif
     if (config.settingsSelected != MENU_POS_VENT_MANUAL) {
-        pidBoiler.compute(boilerTemp, (float)config.refTempBoiler);
+        Serial.print(F("DRQ:V_PID:"));
+        pidBoiler.compute(boilerTemp, (float)config.refTempBoiler, &Serial);
+        Serial.println();
     }
 //    const float boilerDelta = boilerTemp - float(heatNeeded ? config.refTempBoiler : config.refTempBoilerIdle);
     overheating = (overheating && (boilerTemp - config.overheatingLimit >= (debounceLimitC / 2))) ||
