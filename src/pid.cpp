@@ -25,7 +25,7 @@ ThermoinoPID::ThermoinoPID(uint32_t period)
 }
 
 void ThermoinoPID::compute(const float input, const float setPoint) {
-    if (this->lastInput == NAN) {
+    if (isnan(this->lastInput)) {
         this->lastInput = input;
     }
     const float lastError = error;
@@ -37,13 +37,20 @@ void ThermoinoPID::compute(const float input, const float setPoint) {
     this->integral = this->integral + ((this->Kp * float(period) * (error + lastError)) / (2 * this->Ti));
     const float derivative = (-1.0f * this->Kp * this->Td * (input - this->lastInput)) / float(period);
 
-    // anti windup
+    // anti-windup
     if ((proportional + this->integral) > (outMax + this->integralLimit)) {
         this->integral = (outMax + this->integralLimit) - proportional;
     } else if ((proportional + this->integral) < (outMin - this->integralLimit)) {
         this->integral = (outMin - this->integralLimit) - proportional;
     }
 
+//    Serial.print(F("PID:"));
+//    Serial.print(proportional, 2);
+//    Serial.print(",");
+//    Serial.print(derivative, 2);
+//    Serial.print(",");
+//    Serial.print(this->integral, 2);
+//    Serial.println(".");
     this->lastOutput = proportional + derivative;
     this->lastInput = input;
 }
@@ -58,6 +65,10 @@ void ThermoinoPID::setValue(float val) {
 
 void ThermoinoPID::setParams(float Kp, float Ti, float Td) {
     // rescale integral
+    if (this->Kp == Kp && this->Ti == Ti && this->Td == Td) {
+        return;
+    }
+
     this->integral = (this->integral * this->Ti) / Ti;
 
     this->Kp = Kp;

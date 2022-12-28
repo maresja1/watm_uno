@@ -156,6 +156,7 @@ void setup()
     pidBoiler.setOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
     pidBoiler.setParams(config.pidKp, config.pidTi, config.pidTd);
     pidBoiler.setIntegralLimit(10.0f);
+    pidBoiler.setValue(angle);
 
     pidHeatPWM.setOutputLimits(0.0f, float(relayWindowFragments));
     pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayTi, config.pidRelayTd);
@@ -464,9 +465,13 @@ void stateUpdate_angleAndRelay_cb()
     }
 
     if (
-            config.settingsSelected != MENU_POS_SERVO_MIN &&
-            config.settingsSelected != MENU_POS_SERVO_MAX &&
-            (lastAngle != angle || lastCircuitRelay != circuitRelay)
+        config.settingsSelected != MENU_POS_SERVO_MIN &&
+        config.settingsSelected != MENU_POS_SERVO_MAX &&
+        (
+            lastAngle != angle ||
+            lastCircuitRelay != circuitRelay ||
+            config.settingsSelected == MENU_POS_VENT_MANUAL
+        )
     ) {
         notifyTask(&t_effect_refreshServoAndRelay, false);
         notifyTask(&t_effect_printStatus, true);
@@ -562,7 +567,14 @@ void stateUpdate_readButtons_cb()
         notifyTask(&t_effect_printStatus, true);
         notifyTask(&t_stateUpdate_angleAndRelay, true);
         notifyTask(&t_effect_refreshServoAndRelay, true);
-        notifyTask(&t_effect_processSettings, false);
+        // only update eeprom if anything in config changed
+        if (
+            config.settingsSelected >= 0 &&
+            config.settingsSelected != MENU_POS_VENT_MANUAL &&
+            config.settingsSelected != MENU_POS_HEAT_MANUAL
+        ) {
+            notifyTask(&t_effect_processSettings, false);
+        }
     }
 #if DEBUG_LEVEL > 1
     DEBUG_TASK_RET("stateUpdate_readButtons");
