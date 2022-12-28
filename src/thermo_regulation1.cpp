@@ -525,7 +525,7 @@ void effect_refreshServoAndRelay_cb()
     DEBUG_TASK_ENTRY("effect_refreshServoAndRelay");
 #endif
     const bool circuitRelayOrOverride = relay_or_override();
-    if (boilerTemp > 90) {
+    if (boilerTemp > 85) {
         // safety mechanism
         servoSetPos(0);
         sendCurrentStateToRelay(true);
@@ -563,10 +563,11 @@ void stateUpdate_readButtons_cb()
 #if DEBUG_LEVEL > 1
     DEBUG_TASK_ENTRY("stateUpdate_readButtons");
 #endif
-    if (processSettings()) {
+    uint8_t stateChanged = processSettings();
+    if (stateChanged > 0) {
         notifyTask(&t_effect_printStatus, true);
-        notifyTask(&t_stateUpdate_angleAndRelay, true);
-        notifyTask(&t_effect_refreshServoAndRelay, true);
+        notifyTask(&t_stateUpdate_angleAndRelay, false);
+        notifyTask(&t_effect_refreshServoAndRelay, false);
         // only update eeprom if anything in config changed
         if (
             config.settingsSelected >= 0 &&
@@ -727,39 +728,39 @@ void printStatus()
 
 #define MAX_MENU_ITEMS MENU_STATIC_ITEMS // (MENU_STATIC_ITEMS + (config.curveItems * 2) + 1)
 
-bool processSettings()
+uint8_t processSettings()
 {
-    bool stateChanged = false;
+    uint8_t stateChanged = 0x0;
     if (readButton(&btn1) == 1) {
-        stateChanged = true;
+        stateChanged |= 0x2;
         config.settingsSelected = config.settingsSelected - 1;
         if (config.settingsSelected == -2) {
             config.settingsSelected = MAX_MENU_ITEMS - 2;
         }
     }
     if (readButton(&btn2) == 1) {
-        stateChanged = true;
+        stateChanged |= 0x2;
         config.settingsSelected = config.settingsSelected + 1;
         if (config.settingsSelected == MAX_MENU_ITEMS - 1) {
             config.settingsSelected = -1;
         }
     }
-    bool anyPressed;
+
+    int8_t button3Val = readButton(&btn3);
+    int8_t button4Val = readButton(&btn4);
     if (config.settingsSelected >= 0) {
         const ConfigMenuItem_t *currentItem = getMenu(config.settingsSelected);
-        if (readButton(&btn3) == 1 || btn3.pressedFor > 10) {
-            stateChanged = true;
+        if (button3Val == 1 || btn3.pressedFor > 10) {
+            stateChanged |= 0x1;
             currentItem->handler(currentItem->param, -1);
         }
-        if (readButton(&btn4) == 1 || btn4.pressedFor > 10) {
-            stateChanged = true;
+        if (button4Val == 1 || btn4.pressedFor > 10) {
+            stateChanged |= 0x1;
             currentItem->handler(currentItem->param, 1);
         }
-        anyPressed = stateChanged;
-    } else {
-        anyPressed = stateChanged || readButton(&btn3) || readButton(&btn4);
     }
-    if (anyPressed) {
+
+    if (stateChanged > 0 || button3Val || button4Val) {
         screenSaverWakeup();
     } else {
         if (noPressCycles >= 100) {
@@ -783,9 +784,7 @@ void eepromInit()
     EEPROM.get(0, checkCode);
     if (checkCode == EEPROM_MAGIC) {
         EEPROM.get(sizeof(checkCode), config);
-		if (config.settingsSelected < -1 || config.settingsSelected > MAX_MENU_ITEMS) {
-			config.settingsSelected = -1;
-		}
+        config.settingsSelected = -1;
 	// migration
 //    } else if (checkCode == 0xDEADBE00) {
 //        EEPROM.get(sizeof(checkCode), config);

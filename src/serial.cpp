@@ -167,7 +167,7 @@ void serialPrintConfig() {
 
 void notifySettingsChanged() {
     notifyTask(&t_effect_printStatus, true);
-    notifyTask(&t_stateUpdate_angleAndRelay, true);
-    notifyTask(&t_effect_refreshServoAndRelay, true);
+    notifyTask(&t_stateUpdate_angleAndRelay, false);
+    notifyTask(&t_effect_refreshServoAndRelay, false);
     notifyTask(&t_effect_processSettings, false);
 }

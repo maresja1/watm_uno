@@ -109,7 +109,7 @@ typedef struct Button {
 
 void eepromInit();
 void eepromUpdate();
-bool processSettings();
+uint8_t processSettings();
 void printStatus();
 void servoSetPos(int positionPercent);
 void sendCurrentStateToRelay(bool state);
