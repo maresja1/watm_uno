@@ -305,7 +305,8 @@ void stateUpdate_heatNeeded_cb()
         // if the heatPwm has been high for long enough, step up boiler ref. temperature
         if (
             prevHeatPwmAtWindowStart > (relayWindowFragments - 2) &&
-            heatPwmAtWindowStart > (relayWindowFragments - 2)
+            heatPwmAtWindowStart > (relayWindowFragments - 2) &&
+            config.refTempBoiler < int(boilerTemp) + 5
         ) {
             onEdgeCounter++;
         // if the heatPwm has been low for long enough, step down boiler ref. temperature
