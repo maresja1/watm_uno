@@ -308,17 +308,24 @@ void stateUpdate_heatNeeded_cb()
         }
 
 #if USE_BOILER_REF_ADJUST
-        // if the heatPwm has been high for long enough, step up boiler ref. temperature
+        // if the heatPwm has been high for long enough and
+        // boilerTemp is on or close (above) to refTempBoiler,
+        // step up boiler ref. temperature
         if (
             prevHeatPwmAtWindowStart > (relayWindowFragments - 2) &&
             heatPwmAtWindowStart > (relayWindowFragments - 2) &&
-            config.refTempBoiler < int(boilerTemp) + 5
+            int(boilerTemp) > config.refTempBoiler - 2 &&
+            int(boilerTemp) < config.refTempBoiler + 5
         ) {
             onEdgeCounter++;
-        // if the heatPwm has been low for long enough, step down boiler ref. temperature
+        // if the heatPwm has been low for long enough and
+        // boilerTemp is on or close (below) to refTempBoiler,
+        // step down boiler ref. temperature
         } else if (
             float(prevHeatPwmAtWindowStart) < (relayWindowFragments * 0.5f) &&
-            float(heatPwmAtWindowStart) < (relayWindowFragments * 0.5f)
+            float(heatPwmAtWindowStart) < (relayWindowFragments * 0.5f) &&
+            int(boilerTemp) > config.refTempBoiler - 5 &&
+            int(boilerTemp) < config.refTempBoiler + 2
         ) {
             onEdgeCounter--;
         } else {
