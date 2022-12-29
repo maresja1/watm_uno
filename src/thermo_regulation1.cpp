@@ -81,7 +81,7 @@ Configuration config = {
     .pidTi = 120.0f,
     .pidTd = 0.00f,
     // K_u = 0.5 (maybe less), T_u = 800s
-    .pidRelayKp = 10.0f,
+    .pidRelayKp = 8.0f,
     .pidRelayTi = 570.0f,
     .pidRelayTd = 0.0f,
     .settingsSelected = -1
