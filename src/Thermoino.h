@@ -79,11 +79,8 @@ extern uint8_t currAngle;
 extern int16_t settingsSelectedPrint;
 extern float boilerTemp;
 extern float roomTemp;
-extern float roomHumidity;
 extern bool heatNeeded;
 extern uint8_t heatNeededOverride; // 0 no override, 1 - override false, 2 or else - override true
-extern bool overheating;
-extern bool underheating;
 extern bool circuitRelay;
 
 extern Task t_stateUpdate_readButtons;

@@ -1,0 +1,117 @@
+<circuit version="1.0.0-RC3" rev="1148" stepSize="1000000" stepsPS="1000000" NLsteps="100000" reaStep="1000000" animate="0" >
+
+<item itemtype="Probe" CircId="Probe-131" mainComp="false" Show_id="false" Show_Val="true" Pos="-72,-500" rotation="-45" hflip="1" vflip="1" label="Probe-131" idLabPos="16,-16" labelrot="45" valLabPos="16,0" valLabRot="45" ShowVolt="true" Threshold="2.5 V" />
+
+<item itemtype="Resistor" CircId="Resistor-40" mainComp="false" ShowProp="Resistance" Show_id="false" Show_Val="true" Pos="-140,-464" rotation="0" hflip="1" vflip="1" label="Resistor-182" idLabPos="-12,-20" labelrot="0" valLabPos="-16,6" valLabRot="0" Resistance="220 Ω" />
+
+<item itemtype="Led" CircId="Led-39" mainComp="false" Show_id="false" Show_Val="false" Pos="-176,-464" rotation="-180" hflip="1" vflip="1" label="Led-170" idLabPos="-16,-24" labelrot="0" valLabPos="0,0" valLabRot="0" Color="Yellow" Grounded="false" Threshold="2.4 V" MaxCurrent="0.03 A" Resistance="0.6 Ω" />
+
+<item itemtype="Push" CircId="Push-16" mainComp="false" Show_id="false" Show_Val="false" Pos="-544,-164" rotation="0" hflip="1" vflip="1" label="Push-20" idLabPos="-16,-24" labelrot="0" valLabPos="0,0" valLabRot="0" Norm_Close="false" Poles="1 _Poles" />
+
+<item itemtype="Push" CircId="Push-15" mainComp="false" Show_id="false" Show_Val="false" Pos="-592,-164" rotation="0" hflip="1" vflip="1" label="Push-21" idLabPos="-16,-24" labelrot="0" valLabPos="0,0" valLabRot="0" Norm_Close="false" Poles="1 _Poles" />
+
+<item itemtype="Push" CircId="Push-14" mainComp="false" Show_id="false" Show_Val="false" Pos="-452,-164" rotation="0" hflip="1" vflip="1" label="Push-22" idLabPos="-16,-24" labelrot="0" valLabPos="0,0" valLabRot="0" Norm_Close="false" Poles="1 _Poles" />
+
+<item itemtype="Push" CircId="Push-13" mainComp="false" Show_id="false" Show_Val="false" Pos="-496,-164" rotation="0" hflip="1" vflip="1" label="Push-23" idLabPos="-16,-24" labelrot="0" valLabPos="0,0" valLabRot="0" Norm_Close="false" Poles="1 _Poles" />
+
+<item itemtype="RelaySPST" CircId="Relay (all)-10" mainComp="false" Show_id="false" Show_Val="false" Pos="-204,-404" rotation="0" hflip="1" vflip="1" label="Relay (all)-28" idLabPos="-16,-24" labelrot="0" valLabPos="-16,6" valLabRot="0" Norm_Close="true" DT="false" Poles="1 _Poles" IOn="0.02 A" IOff="0.01 A" Inductance="0.1 H" Rcoil="50 Ω" AutoStep="0 _Steps" />
+
+<item itemtype="Rail" CircId="Rail.-9" mainComp="false" ShowProp="Voltage" Show_id="false" Show_Val="true" Pos="-156,-508" rotation="0" hflip="1" vflip="1" label="Rail.-29" idLabPos="-64,-24" labelrot="0" valLabPos="-16,8" valLabRot="0" Voltage="5 V" />
+
+<item itemtype="Ground" CircId="Ground (0 V)-8" mainComp="false" Show_id="false" Show_Val="false" Pos="-144,-224" rotation="0" hflip="1" vflip="1" label="Ground (0 V)-30" idLabPos="-16,-24" labelrot="0" valLabPos="0,0" valLabRot="0" />
+
+<item itemtype="Servo" CircId="Servo-7" mainComp="false" Show_id="false" Show_Val="false" Pos="-60,-316" rotation="0" hflip="1" vflip="1" label="Servo-31" idLabPos="-16,-24" labelrot="0" valLabPos="0,0" valLabRot="0" Speed="0.2 _sec/60º" Input_High_V="2.5 V" Input_Low_V="2.5 V" Input_Imped="1e+9 Ω" />
+
+<item itemtype="Hd44780" CircId="Hd44780-6" mainComp="false" Show_id="true" Show_Val="false" Pos="-444,-456" rotation="0" hflip="1" vflip="1" label="Hd44780-34" idLabPos="59,-107" labelrot="0" valLabPos="0,0" valLabRot="0" Rows="2 _Rows" Cols="16 _Columns" />
+
+<item itemtype="Subcircuit" CircId="Uno-5" mainComp="false" Show_id="true" Show_Val="false" Pos="-460,-404" rotation="90" hflip="1" vflip="1" label="Arduino Uno-36" idLabPos="0,-20" labelrot="0" valLabPos="0,0" valLabRot="0" Logic_Symbol="false">
+<mainCompProps itemtype="MCU" CircId="5_mega328-109" mainComp="true" Show_id="false" Show_Val="false" Pos="20,20" rotation="0" hflip="1" vflip="1" label="5_mega328-109" idLabPos="0,-20" labelrot="0" valLabPos="-16,20" valLabRot="0" eeprom="2,190,173,222,55,0,0,168,65,0,0,0,180,0,45,80,143,194,117,62,0,0,0,0,0,0,0,0,0,0,128,64,0,0,240,66,0,0,0,0,0,0,32,65,0,0,180,67,0,0,0,0," Frequency="16 MHz" Program=".pio/build/uno/firmware.hex" Auto_Load="false" Rst_enabled="true" Ext_Osc="true" Wdt_enabled="false" />
+</item>
+
+<item itemtype="Ground" CircId="Ground (0 V)-4" mainComp="false" Show_id="false" Show_Val="false" Pos="-568,-36" rotation="0" hflip="1" vflip="1" label="Ground (0 V)-37" idLabPos="-16,-24" labelrot="0" valLabPos="0,0" valLabRot="0" />
+
+<item itemtype="I2CToParallel" CircId="I2CToParallel-1" mainComp="false" Show_id="false" Show_Val="false" Pos="-528,-412" rotation="0" hflip="1" vflip="1" label="I2CToParallel-247" idLabPos="-16,-24" labelrot="0" valLabPos="0,0" valLabRot="0" Control_Code="39" Frequency="100 _KHz" />
+
+<item itemtype="Node" CircId="Node-273" mainComp="false" Pos="-568,-124" />
+
+<item itemtype="Node" CircId="Node-132" mainComp="false" Pos="-116,-484" />
+
+<item itemtype="Node" CircId="Node-41" mainComp="false" Pos="-116,-464" />
+
+<item itemtype="Node" CircId="Node-12" mainComp="false" Pos="-180,-420" />
+
+<item itemtype="Node" CircId="Node-11" mainComp="false" Pos="-180,-316" />
+
+<item itemtype="Node" CircId="Node-323" mainComp="false" Pos="-568,-124" />
+
+<item itemtype="Node" CircId="Node-339" mainComp="false" Pos="-512,-124" />
+
+<item itemtype="Connector" uid="connector-375" startpinid="Servo-7-in1" endpinid="Node-11-0" pointList="-108,-316,-180,-316" />
+
+<item itemtype="Connector" uid="connector-376" startpinid="Node-11-1" endpinid="Node-12-0" pointList="-180,-316,-180,-420" />
+
+<item itemtype="Connector" uid="connector-377" startpinid="Relay (all)-10-switch0pinN" endpinid="Node-12-1" pointList="-188,-420,-180,-420" />
+
+<item itemtype="Connector" uid="connector-378" startpinid="Node-12-2" endpinid="Relay (all)-10-inductor-rPin" pointList="-180,-420,-180,-404,-188,-404" />
+
+<item itemtype="Connector" uid="connector-379" startpinid="Led-39-rPin" endpinid="Relay (all)-10-pinP2" pointList="-192,-464,-220,-464,-220,-420" />
+
+<item itemtype="Connector" uid="connector-380" startpinid="Servo-7-in0" endpinid="Node-41-0" pointList="-108,-332,-108,-464,-116,-464" />
+
+<item itemtype="Connector" uid="connector-381" startpinid="Resistor-40-lPin" endpinid="Led-39-lPin" pointList="-156,-464,-160,-464" />
+
+<item itemtype="Connector" uid="connector-382" startpinid="Resistor-40-rPin" endpinid="Node-41-1" pointList="-124,-464,-116,-464" />
+
+<item itemtype="Connector" uid="connector-383" startpinid="Node-41-2" endpinid="Node-132-0" pointList="-116,-464,-116,-484" />
+
+<item itemtype="Connector" uid="connector-384" startpinid="I2CToParallel-1-in0" endpinid="Uno-5-A4" pointList="-552,-428,-596,-428,-596,-244,-292,-244,-292,-220" />
+
+<item itemtype="Connector" uid="connector-385" startpinid="Uno-5-A5" endpinid="I2CToParallel-1-in1" pointList="-284,-220,-284,-252,-584,-252,-584,-420,-552,-420" />
+
+<item itemtype="Connector" uid="connector-386" startpinid="Hd44780-6-PinRS" endpinid="I2CToParallel-1-out0" pointList="-428,-448,-428,-436,-504,-436" />
+
+<item itemtype="Connector" uid="connector-387" startpinid="Hd44780-6-PinRW" endpinid="I2CToParallel-1-out1" pointList="-420,-448,-420,-428,-504,-428" />
+
+<item itemtype="Connector" uid="connector-388" startpinid="Hd44780-6-PinEn" endpinid="I2CToParallel-1-out2" pointList="-412,-448,-412,-420,-504,-420" />
+
+<item itemtype="Connector" uid="connector-389" startpinid="Hd44780-6-dataPin4" endpinid="I2CToParallel-1-out4" pointList="-372,-448,-372,-404,-504,-404" />
+
+<item itemtype="Connector" uid="connector-390" startpinid="I2CToParallel-1-out5" endpinid="Hd44780-6-dataPin5" pointList="-504,-396,-364,-396,-364,-448" />
+
+<item itemtype="Connector" uid="connector-391" startpinid="I2CToParallel-1-out6" endpinid="Hd44780-6-dataPin6" pointList="-504,-388,-356,-388,-356,-448" />
+
+<item itemtype="Connector" uid="connector-392" startpinid="I2CToParallel-1-out7" endpinid="Hd44780-6-dataPin7" pointList="-504,-380,-348,-380,-348,-448" />
+
+<item itemtype="Connector" uid="connector-393" startpinid="Node-132-2" endpinid="Rail.-9-outnod" pointList="-116,-484,-116,-508,-140,-508" />
+
+<item itemtype="Connector" uid="connector-394" startpinid="Node-132-1" endpinid="Probe-131-inpin" pointList="-116,-484,-88,-484" />
+
+<item itemtype="Connector" uid="connector-395" startpinid="Uno-5-3" endpinid="Servo-7-in2" pointList="-308,-364,-308,-300,-108,-300" />
+
+<item itemtype="Connector" uid="connector-396" startpinid="Uno-5-2" endpinid="Relay (all)-10-inductor-lPin" pointList="-300,-364,-300,-404,-220,-404" />
+
+<item itemtype="Connector" uid="connector-397" startpinid="Push-16-switch0pinN" endpinid="Uno-5-7" pointList="-528,-164,-528,-324,-340,-324,-340,-364" />
+
+<item itemtype="Connector" uid="connector-398" startpinid="Push-15-switch0pinN" endpinid="Uno-5-6" pointList="-576,-164,-576,-316,-332,-316,-332,-364" />
+
+<item itemtype="Connector" uid="connector-399" startpinid="Push-14-switch0pinN" endpinid="Uno-5-5" pointList="-436,-164,-436,-308,-324,-308,-324,-364" />
+
+<item itemtype="Connector" uid="connector-400" startpinid="Push-13-switch0pinN" endpinid="Uno-5-4" pointList="-480,-164,-480,-296,-316,-296,-316,-364" />
+
+<item itemtype="Connector" uid="connector-401" startpinid="Node-273-2" endpinid="Node-323-0" pointList="-568,-124,-568,-124" />
+
+<item itemtype="Connector" uid="connector-402" startpinid="Node-11-2" endpinid="Ground (0 V)-8-Gnd" pointList="-180,-316,-180,-244,-144,-244,-144,-240" />
+
+<item itemtype="Connector" uid="connector-403" startpinid="Node-273-1" endpinid="Ground (0 V)-4-Gnd" pointList="-568,-124,-568,-52" />
+
+<item itemtype="Connector" uid="connector-404" startpinid="Push-15-pinP0" endpinid="Node-323-1" pointList="-608,-164,-608,-124,-568,-124" />
+
+<item itemtype="Connector" uid="connector-405" startpinid="Node-323-2" endpinid="Push-16-pinP0" pointList="-568,-124,-568,-164,-560,-164" />
+
+<item itemtype="Connector" uid="connector-406" startpinid="Node-273-0" endpinid="Node-339-0" pointList="-568,-124,-512,-124" />
+
+<item itemtype="Connector" uid="connector-408" startpinid="Node-339-2" endpinid="Push-13-pinP0" pointList="-512,-124,-512,-164" />
+
+<item itemtype="Connector" uid="connector-407" startpinid="Push-14-pinP0" endpinid="Node-339-1" pointList="-468,-164,-468,-124,-512,-124" />
+
+</circuit>

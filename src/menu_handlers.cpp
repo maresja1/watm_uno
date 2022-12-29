@@ -181,6 +181,7 @@ const void *menuHandlerVent(__attribute__((unused)) const void *param, int8_t di
         angle = (angle / 5) * 5;
     }
     currAngle = angle;
+    pidBoiler.setIntegralToValue(angle, boilerTemp, config.refTempBoiler);
     return &angle;
 }
 
@@ -195,7 +196,7 @@ const void *menuHandlerHeating(__attribute__((unused)) const void *param, int8_t
     if (pidRelayOut  > 10.0f) {
         pidRelayOut = 10.0f;
     }
-    pidHeatPWM.setValue(pidRelayOut);
+    pidHeatPWM.setIntegralToValue(pidRelayOut, roomTemp, (float) config.refTempRoom);
     return &pidRelayOut;
 }
 

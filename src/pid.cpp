@@ -32,10 +32,10 @@ void ThermoinoPID::compute(const float input, const float setPoint, Stream * con
     error = setPoint - input;
 
 
-    float proportional = this->Kp * error;
+    float proportional = getProportional(error);
     // Trapezoidal Integration
     this->integral = this->integral + ((this->Kp * float(period) * (error + lastError)) / (2 * this->Ti));
-    const float derivative = (-1.0f * this->Kp * this->Td * (input - this->lastInput)) / float(period);
+    const float derivative = getDerivative(input);
 
     // anti-windup
     if ((proportional + this->integral) > (outMax + this->integralLimit)) {
@@ -55,11 +55,28 @@ void ThermoinoPID::compute(const float input, const float setPoint, Stream * con
     this->lastInput = input;
 }
 
+float ThermoinoPID::getDerivative(const float input) const
+{
+    return (-1.0f * Kp * Td * (input - lastInput)) / float(period);
+}
+
+float ThermoinoPID::getProportional(float error) const
+{
+    return Kp * error;
+}
+
 float ThermoinoPID::getConstrainedValue() {
     return constrain(lastOutput + this->integral, outMin, outMax);
 }
 
-void ThermoinoPID::setValue(float val) {
+void ThermoinoPID::setIntegralToValue(float val, const float input, const float setPoint)
+{
+    const float error = setPoint - input;
+    if (!isnan(this->lastInput)) {
+        this->integral = val - getProportional(error) - getDerivative(input);
+    } else {
+        this->integral = val - getProportional(error);
+    }
     this->lastOutput = val;
 }
 

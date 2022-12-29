@@ -13,9 +13,9 @@ public:
 
     void compute(float input, float setPoint, Stream * print = nullptr);
 
-    float getConstrainedValue();
+    void setIntegralToValue(float val, float input, float setPoint);
 
-    void setValue(float val);
+    float getConstrainedValue();
 
     void setOutputLimits(float min, float max);
 
@@ -33,5 +33,9 @@ private:
     float Td;
 
     uint32_t period;
+
+    float getProportional(float error) const;
+
+    float getDerivative(const float input) const;
 }; // class ThermoinoPID
 #endif //THERMOINO_PID_H

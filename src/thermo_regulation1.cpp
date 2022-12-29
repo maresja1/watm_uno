@@ -7,7 +7,7 @@
 #include "pid.h"
 
 #define USE_SIMULATION 0
-#define USE_BOILER_REF_ADJUST 0
+#define USE_BOILER_REF_ADJUST 1
 #define USE_CIRCUIT_RELAY_FEED_FWD 0
 
 #if USE_DHT_ROOM_TEMP && !USE_SIMULATION
@@ -87,16 +87,17 @@ Configuration config = {
 
 char buffer[MAX_BUFFER_LEN];
 
-uint8_t angle = 50;
-uint8_t currAngle = 50;
+uint8_t angle = 30;
+uint8_t currAngle = angle;
 int16_t settingsSelectedPrint = -2;
-float boilerTemp = 50.0f;
 float roomTemp = 21.0f;
+float boilerTemp = roomTemp;
 bool heatNeeded = false;
 uint8_t heatNeededOverride = 0; // 0 no override, 1 - override false, 2 or else - override true
-bool overheating = false;
-bool underheating = false;
 bool circuitRelay = false;
+
+const uint8_t BOILER_TEMP_INIT_VECTOR_MASK = 0x1;
+uint8_t initVector = 0x0;
 
 // backlight screensaver
 uint8_t noPressCycles = 0;
@@ -156,7 +157,6 @@ void setup()
     pidBoiler.setOutputLimits(0.0f + boilerPidOutOffset, 99.0f + boilerPidOutOffset);
     pidBoiler.setParams(config.pidKp, config.pidTi, config.pidTd);
     pidBoiler.setIntegralLimit(10.0f);
-    pidBoiler.setValue(angle);
 
     pidHeatPWM.setOutputLimits(0.0f, float(relayWindowFragments));
     pidHeatPWM.setParams(config.pidRelayKp, config.pidRelayTi, config.pidRelayTd);
@@ -279,7 +279,7 @@ void stateUpdate_heatNeeded_cb()
     const bool lastHeatNeeded = heatNeeded;
     heatNeededCurrentFragment++;
 
-    if (!underheating && config.settingsSelected != MENU_POS_HEAT_MANUAL) {
+    if (config.settingsSelected != MENU_POS_HEAT_MANUAL) {
         Serial.print(F("DRQ:H_PID:"));
         pidHeatPWM.compute(roomTemp, (float) config.refTempRoom, &Serial);
         Serial.println();
@@ -310,19 +310,19 @@ void stateUpdate_heatNeeded_cb()
             onEdgeCounter++;
         // if the heatPwm has been low for long enough, step down boiler ref. temperature
         } else if (
-            float(prevHeatPwmAtWindowStart) < (relayWindowFragments * 0.75f) &&
-            float(heatPwmAtWindowStart) < (relayWindowFragments * 0.75f)
+            float(prevHeatPwmAtWindowStart) < (relayWindowFragments * 0.5f) &&
+            float(heatPwmAtWindowStart) < (relayWindowFragments * 0.5f)
         ) {
             onEdgeCounter--;
         } else {
             onEdgeCounter = 0;
         }
 
-        if (onEdgeCounter >= 5 && config.refTempBoiler < (config.overheatingLimit - (2 * debounceLimitC))) {
+        if (onEdgeCounter >= 5 && config.refTempBoiler < (config.overheatingLimit - 5)) {
             onEdgeCounter = 0;
             config.refTempBoiler++;
             notifySettingsChanged();
-        } else if (onEdgeCounter <= -5 && config.refTempBoiler > (config.underheatingLimit + (2 * debounceLimitC))) {
+        } else if (onEdgeCounter <= -5 && config.refTempBoiler > (config.underheatingLimit + 5)) {
             onEdgeCounter = 0;
             config.refTempBoiler--;
             notifySettingsChanged();
@@ -378,21 +378,26 @@ void stateUpdate_readSensors_cb()
 
 #if !USE_SIMULATION
 #if USE_DHT_ROOM_TEMP
-        float lastReading = digitalThermometer.readTemperature(false, false) + config.roomTempAdjust;
-        if (roomTemp > 0.0f) {
-            // see https://stackoverflow.com/questions/10990618/calculate-rolling-moving-average-in-c/10990656#10990656
-            roomTemp = (lastReading + (4 * roomTemp)) / 5; // running average
-        } else {
-            roomTemp = lastReading;
-        }
+    float lastReading = digitalThermometer.readTemperature(false, false) + config.roomTempAdjust;
+    if (roomTemp > 0.0f) {
+        // see https://stackoverflow.com/questions/10990618/calculate-rolling-moving-average-in-c/10990656#10990656
+        roomTemp = (lastReading + (9 * roomTemp)) / 10; // running average
+    } else {
+        roomTemp = lastReading;
+    }
 //        roomHumidity = digitalThermometer.readHumidity(false);
 #else
-        roomTemp = readTemp(ROOM_THERM_PIN);
+    roomTemp = readTemp(ROOM_THERM_PIN);
 #endif
 
 #if USE_DT_ROOM_BOILER
-        boilerTemp = dtTempBoiler.getTempC(&deviceAddress);
-        dtTempBoiler.requestTemperaturesByAddress(&deviceAddress); // make ready for next call
+    boilerTemp = dtTempBoiler.getTempC(&deviceAddress);
+    dtTempBoiler.requestTemperaturesByAddress(&deviceAddress); // make ready for next call
+
+    if ((initVector & BOILER_TEMP_INIT_VECTOR_MASK) == 0) {
+        initVector |= BOILER_TEMP_INIT_VECTOR_MASK;
+        pidBoiler.setIntegralToValue(angle, boilerTemp, config.refTempBoiler);
+    }
 #else
         boilerTemp = readTemp(BOILER_THERM_PIN);
 #endif
@@ -447,10 +452,10 @@ void stateUpdate_angleAndRelay_cb()
         Serial.println();
     }
 //    const float boilerDelta = boilerTemp - float(heatNeeded ? config.refTempBoiler : config.refTempBoilerIdle);
-    overheating = (overheating && (boilerTemp - config.overheatingLimit >= (debounceLimitC / 2))) ||
+    bool overheating = (overheating && (boilerTemp - config.overheatingLimit >= (debounceLimitC / 2))) ||
                   (boilerTemp - config.overheatingLimit >= -(debounceLimitC / 2));
 
-    underheating = (underheating && (boilerTemp - config.underheatingLimit <= (debounceLimitC / 2))) ||
+    bool underheating = (underheating && (boilerTemp - config.underheatingLimit <= (debounceLimitC / 2))) ||
                    (boilerTemp - config.underheatingLimit <= -(debounceLimitC / 2));
 
     bool lastCircuitRelay = circuitRelay;
