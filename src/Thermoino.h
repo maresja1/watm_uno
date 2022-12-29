@@ -118,6 +118,7 @@ void stateUpdate_simulator_cb();
 void stateUpdate_serialReader_cb();
 //void stateUpdate_hotWaterProbe_cb();
 void stateUpdate_readSensors_cb();
+void stateUpdate_readRoomTemp_cb();
 void effect_refreshServoAndRelay_cb();
 void effect_printStatus_cb();
 void stateUpdate_angleAndRelay_cb();

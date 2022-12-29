@@ -2,6 +2,7 @@
 #include <EEPROM.h>
 #include <Servo.h>
 #include <TaskScheduler.h>
+#include <avr/wdt.h>
 
 #include "Thermoino.h"
 #include "pid.h"
@@ -30,6 +31,7 @@ Task t_stateUpdate_readButtons(1e2, -1, &stateUpdate_readButtons_cb, &runner);
 Task t_stateUpdate_angleAndRelay(uint64_t(10e3 / simulationSpeed), 1, &stateUpdate_angleAndRelay_cb, &runner);
 // periodic task to read sensors - temperatures, might enable other tasks
 Task t_stateUpdate_readSensors(uint64_t(2e3 / simulationSpeed), -1, &stateUpdate_readSensors_cb, &runner);
+Task t_stateUpdate_readRoomTemp(uint64_t(10e3 / simulationSpeed), -1, &stateUpdate_readRoomTemp_cb, &runner);
 // periodic task for hot water probe - allows relay to let some water through once in a while to allow for better measurement
 //Task t_stateUpdate_hotWaterProbe(uint64_t(1e4 / simulationSpeed), -1, &stateUpdate_hotWaterProbe_cb, &runner);
 // periodic task for PID heat control
@@ -169,6 +171,7 @@ void setup()
 
     t_stateUpdate_readButtons.enable();
     t_stateUpdate_readSensors.enable();
+    t_stateUpdate_readRoomTemp.enable();
 
     lcd.write(".");
 
@@ -184,6 +187,9 @@ void setup()
 
     effect_processSettings_cb();
 //    tuner.Configure(100, 99, 11, 12, 500, 50, 200);
+    wdt_disable();  /* Disable the watchdog and wait for more than 2 seconds */
+    delay(3000);  /* Done so that the Arduino doesn't keep resetting infinitely in case of wrong configuration */
+    wdt_enable(WDTO_8S);  /* Enable the watchdog with a timeout of 2 seconds */
 }
 
 void loop()
@@ -375,22 +381,8 @@ void stateUpdate_readSensors_cb()
     DEBUG_TASK_ENTRY("stateUpdate_readSensors");
 #endif
     const float lastBoilerTemp = boilerTemp;
-    const float lastRoomTemp = roomTemp;
 
 #if !USE_SIMULATION
-#if USE_DHT_ROOM_TEMP
-    float lastReading = digitalThermometer.readTemperature(false, false) + config.roomTempAdjust;
-    if (roomTemp > 0.0f) {
-        // see https://stackoverflow.com/questions/10990618/calculate-rolling-moving-average-in-c/10990656#10990656
-        roomTemp = (lastReading + (9 * roomTemp)) / 10; // running average
-    } else {
-        roomTemp = lastReading;
-    }
-//        roomHumidity = digitalThermometer.readHumidity(false);
-#else
-    roomTemp = readTemp(ROOM_THERM_PIN);
-#endif
-
 #if USE_DT_ROOM_BOILER
     boilerTemp = dtTempBoiler.getTempC(&deviceAddress);
     dtTempBoiler.requestTemperaturesByAddress(&deviceAddress); // make ready for next call
@@ -404,7 +396,7 @@ void stateUpdate_readSensors_cb()
 #endif
 
     // roomTemp is not NaN
-    if (roomTemp == roomTemp) {
+    if (!isnan(roomTemp)) {
         boilerTemp += (config.deltaTempPoly1 * (boilerTemp - roomTemp)) + config.deltaTempPoly0;
     }
 
@@ -412,31 +404,55 @@ void stateUpdate_readSensors_cb()
     stateUpdate_simulator_cb();
 #endif
 
-//    switch (tuner.Run()) {
-//        case tuner.sample:
-//            break;
-//        case tuner.tunings:
-//            tuner.GetAutoTunings(&config.pidKp, &config.pidTi, &config.pidTd);
-//            pidBoiler.SetMode(QuickPID::Control::timer);
-//            pidBoiler.SetTunings(config.pidKp, config.pidTi, config.pidTd);
-//            break;
-//        case tuner.runPid:
-//            break;
-//    }
+    wdt_reset();
 
-    if((boilerTemp != lastBoilerTemp) || (roomTemp != lastRoomTemp)) {
+    if(boilerTemp != lastBoilerTemp) {
         notifyTask(&t_stateUpdate_angleAndRelay, false);
         notifyTask(&t_effect_printStatus, false);
 
 #if PRINT_SERIAL_UPDATES
-        Serial.print(F("DRQ:RT:"));
-        Serial.println(String(roomTemp));
         Serial.print(F("DRQ:BT:"));
         Serial.println(String(boilerTemp));
 #endif
     }
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_RET("stateUpdate_readSensors");
+#endif
+}
+
+void stateUpdate_readRoomTemp_cb()
+{
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_ENTRY("stateUpdate_readRoomTemp");
+#endif
+    const float lastRoomTemp = roomTemp;
+
+#if !USE_SIMULATION
+#if USE_DHT_ROOM_TEMP
+    float lastReading = digitalThermometer.readTemperature(false, false) + config.roomTempAdjust;
+    if (roomTemp > 0.0f) {
+        // see https://stackoverflow.com/questions/10990618/calculate-rolling-moving-average-in-c/10990656#10990656
+        roomTemp = (lastReading + (4 * roomTemp)) / 5; // running average
+    } else {
+        roomTemp = lastReading;
+    }
+//        roomHumidity = digitalThermometer.readHumidity(false);
+#else
+    roomTemp = readTemp(ROOM_THERM_PIN);
+#endif
+#endif
+
+    if(roomTemp != lastRoomTemp) {
+        notifyTask(&t_stateUpdate_angleAndRelay, false);
+        notifyTask(&t_effect_printStatus, false);
+
+#if PRINT_SERIAL_UPDATES
+        Serial.print(F("DRQ:RT:"));
+        Serial.println(String(roomTemp));
+#endif
+    }
+#if DEBUG_LEVEL > 0
+    DEBUG_TASK_RET("stateUpdate_readRoomTemp");
 #endif
 }
 
