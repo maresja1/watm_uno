@@ -9,8 +9,6 @@
 #define _TASK_INLINE
 
 #include <TaskScheduler.h>
-#include <LiquidCrystal_I2C.h>
-#include "pid.h"
 
 #define DEBUG_LEVEL 0
 #define DT_BOILER_PIN 11
@@ -25,8 +23,8 @@
 #define USE_DHT_ROOM_TEMP 1
 #define USE_DT_ROOM_BOILER 1
 
-#if 0
-#define DEBUG_TASK_ENTRY(x) do { Serial.print(F(#x" - e")); Serial.println(""); } while(0)
+#if DEBUG_LEVEL > 0
+#define DEBUG_TASK_ENTRY(x) do { Serial.print(millis()); Serial.print(F(" - "#x" - e")); Serial.println(""); } while(0)
 #define DEBUG_TASK_RET(x) do { Serial.print(F(#x" - r")); Serial.println(""); } while(0)
 #else
 #define DEBUG_TASK_ENTRY(x)
@@ -43,60 +41,27 @@
 #define DEBUG_SER_PRINT_LN(x) do { Serial.println(x); } while(0)
 #endif
 
-#define relay_or_override() config.circuitRelayForced == 0 ? circuitRelay : config.circuitRelayForced == 1
-
 #define MAX_BUFFER_LEN 20
 extern char buffer[];
+extern void ser_print_ll(uint64_t ll);
 
-const float debounceLimitC = 2.0f;
-
-struct Configuration {
-    uint8_t refTempBoiler;
-    float refTempRoom;
-    uint8_t circuitRelayForced;
-    int16_t servoMin;
-    int16_t servoMax;
-    uint8_t underheatingLimit;
-    uint8_t overheatingLimit;
-    // linear interpolation (least squares) of the following points:
-    // [boilerTemp - roomTemp, real boilerTemp - boilerTemp]
-    float deltaTempPoly1;
-    float deltaTempPoly0;
-    float roomTempAdjust;
-    float pidKp;
-    float pidTi;
-    float pidTd;
-    float pidRelayKp;
-    float pidRelayTi;
-    float pidRelayTd;
-    int16_t settingsSelected;
+struct State {
+    double volume;
+    uint32_t volumePulses;
+    float volumeFlow;
+    uint32_t volumeFlowPulses;
 };
 
-extern uint8_t heatPwmAtWindowStart;
-extern Configuration config;
-extern uint8_t angle;
-extern uint8_t currAngle;
-extern int16_t settingsSelectedPrint;
-extern float boilerTemp;
-extern float roomTemp;
-extern bool heatNeeded;
-extern uint8_t heatNeededOverride; // 0 no override, 1 - override false, 2 or else - override true
-extern bool circuitRelay;
+struct Config {
+    uint8_t Q_div;
+    uint8_t Q_offset;
+};
 
-extern Task t_stateUpdate_readButtons;
-extern Task t_stateUpdate_angleAndRelay;
+extern State state;
+extern Config config;
+
 extern Task t_stateUpdate_readSensors;
-//extern Task t_stateUpdate_hotWaterProbe;
-extern Task t_stateUpdate_heatNeeded;
 extern Task t_stateUpdate_serialReader;
-extern Task t_effect_refreshServoAndRelay;
-extern Task t_effect_printStatus;
-extern Task t_effect_processSettings;
-
-extern LiquidCrystal_I2C lcd;
-
-extern ThermoinoPID pidBoiler;
-extern ThermoinoPID pidHeatPWM;
 
 typedef struct Button {
     uint8_t pin;
@@ -106,31 +71,16 @@ typedef struct Button {
 
 void eepromInit();
 void eepromUpdate();
-uint8_t processSettings();
-void printStatus();
-void servoSetPos(int positionPercent);
-void sendCurrentStateToRelay(bool state);
-void screenSaverWakeup();
-void notifySettingsChanged();
 
-void stateUpdate_heatNeeded_cb();
-void stateUpdate_simulator_cb();
 void stateUpdate_serialReader_cb();
 //void stateUpdate_hotWaterProbe_cb();
 void stateUpdate_readSensors_cb();
-void stateUpdate_readRoomTemp_cb();
-void effect_refreshServoAndRelay_cb();
-void effect_printStatus_cb();
-void stateUpdate_angleAndRelay_cb();
-void stateUpdate_readButtons_cb();
-void effect_processSettings_cb();
 
 void serialLineSetup();
 void serialLineBufferLoop();
+void serialPrintState();
 void serialPrintConfig();
 
 void notifyTask(Task *task, bool immediate);
-
-#include "menu.h"
 
 #endif //THERMOINO_H

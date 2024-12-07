@@ -56,17 +56,8 @@ void serialLineBufferLoop() {
 void stateUpdate_serialReader_cb()
 {
 
-#define CMD_HNO "HNO"
-#define CMD_VENT_SET "O"
-#define CMD_BOILER_REF_TEMP_SET "BRT"
-#define CMD_ROOM_REF_TEMP_SET "RRT"
-#define CMD_PID_BL_Kp "PID_BL_Kp"
-#define CMD_PID_BL_Ki "PID_BL_Ki"
-#define CMD_PID_BL_Kd "PID_BL_Kd"
-#define CMD_PID_CR_Kp "PID_CR_Kp"
-#define CMD_PID_CR_Ki "PID_CR_Ki"
-#define CMD_PID_CR_Kd "PID_CR_Kd"
-#define CMD_MODE "M"
+#define CMD_SET_Q_DIV "QD"
+#define CMD_SET_Q_OFF "QO"
 #define CMD_INTERNAL "INT"
 #define literal_len(x) (sizeof(x) - 1)
 #define PARSE(x) if (commandBuffer.startsWith(F(x ":"))) { const String &valueBuffer = commandBuffer.substring(literal_len(x ":"));
@@ -86,50 +77,26 @@ void stateUpdate_serialReader_cb()
 #endif
         if (sBuffer.startsWith(F("DRQ:"))) {
             const String &commandBuffer = sBuffer.substring(4);
-            PARSE(CMD_HNO)
-                heatNeededOverride = strtol(valueBuffer.c_str(), nullptr, 10);
-                notifySettingsChanged();
-                screenSaverWakeup();
-            OR_PARSE(CMD_VENT_SET)
-                config.settingsSelected = MENU_POS_VENT_MANUAL;
-                angle = strtol(valueBuffer.c_str(), nullptr, 10);
-                notifySettingsChanged();
-                screenSaverWakeup();
-            OR_PARSE(CMD_BOILER_REF_TEMP_SET)
-                config.refTempBoiler = strtol(valueBuffer.c_str(), nullptr, 10);
-                notifySettingsChanged();
-            OR_PARSE(CMD_ROOM_REF_TEMP_SET)
-                config.refTempRoom = strtod(valueBuffer.c_str(), nullptr);
-                notifySettingsChanged();
-            OR_PARSE(CMD_PID_BL_Kp)
-                config.pidKp = strtod(valueBuffer.c_str(), nullptr);
-                notifySettingsChanged();
-            OR_PARSE(CMD_PID_BL_Ki)
-                config.pidTi = strtod(valueBuffer.c_str(), nullptr);
-                notifySettingsChanged();
-            OR_PARSE(CMD_PID_BL_Kd)
-                config.pidTd = strtod(valueBuffer.c_str(), nullptr);
-                notifySettingsChanged();
-            OR_PARSE(CMD_PID_CR_Kp)
-                config.pidRelayKp = strtod(valueBuffer.c_str(), nullptr);
-                notifySettingsChanged();
-            OR_PARSE(CMD_PID_CR_Ki)
-                config.pidRelayTi = strtod(valueBuffer.c_str(), nullptr);
-                notifySettingsChanged();
-            OR_PARSE(CMD_PID_CR_Kd)
-                config.pidRelayTd = strtod(valueBuffer.c_str(), nullptr);
-                notifySettingsChanged();
-            OR_PARSE(CMD_MODE)
-                if (valueBuffer.equals("A")) {
-                    config.settingsSelected = -1;
-                    heatNeededOverride = 0;
-                    notifySettingsChanged();
-                    screenSaverWakeup();
-                }
-            OR_PARSE(CMD_INTERNAL)
+            PARSE(CMD_INTERNAL)
                 if (valueBuffer.equals("SYNC")) {
+                    serialPrintState();
+                    serialPrintConfig();
+                } else if (valueBuffer.equals("RES")) {
+                    state.volume = 0.0f;
+                    state.volumePulses = 0;
+                    state.volumeFlowPulses = 0;
+                    state.volumeFlow = 0.0f;
+                    config.Q_div = 6;
+                    config.Q_offset = 8;
+                    serialPrintState();
                     serialPrintConfig();
                 }
+            OR_PARSE(CMD_SET_Q_DIV)
+                config.Q_div = strtol(valueBuffer.c_str(), nullptr, 10);
+                serialPrintConfig();
+            OR_PARSE(CMD_SET_Q_OFF)
+                config.Q_offset = strtol(valueBuffer.c_str(), nullptr, 10);
+                serialPrintConfig();
             } else {
                 // Serial.print(F("Unknown command: "));
                 // Serial.println(sBuffer);
@@ -138,36 +105,21 @@ void stateUpdate_serialReader_cb()
     }
 }
 
-void serialPrintConfig() {
-    Serial.print(F("DRQ:R:"));
-    Serial.println(String(relay_or_override()));
-    Serial.print(F("DRQ:O:"));
-    Serial.println(angle);
-    Serial.print(F("DRQ:BRT:"));
-    Serial.println(config.refTempBoiler);
-    Serial.print(F("DRQ:RRT:"));
-    Serial.println(config.refTempRoom);
-    Serial.print(F("DRQ:SET:"));
-    Serial.println(config.settingsSelected);
-    Serial.print(F("DRQ:PID_BL_Kp:"));
-    Serial.println(config.pidKp, 4);
-    Serial.print(F("DRQ:PID_BL_Ki:"));
-    Serial.println(config.pidTi, 4);
-    Serial.print(F("DRQ:PID_BL_Kd:"));
-    Serial.println(config.pidTd, 4);
-    Serial.print(F("DRQ:PID_CR_Kp:"));
-    Serial.println(config.pidRelayKp, 4);
-    Serial.print(F("DRQ:PID_CR_Ki:"));
-    Serial.println(config.pidRelayTi, 4);
-    Serial.print(F("DRQ:PID_CR_Kd:"));
-    Serial.println(config.pidRelayTd, 4);
-    Serial.print(F("DRQ:HPWM:"));
-    Serial.println(lround(double(pidHeatPWM.getConstrainedValue())));
+void serialPrintState() {
+    Serial.print(F("DRQ:V:"));
+    Serial.println(state.volume, 4);
+    Serial.print(F("DRQ:VP:"));
+    Serial.println(state.volumePulses);
+    Serial.print(F("DRQ:VF:"));
+    Serial.println(state.volumeFlow, 4);
+    Serial.print(F("DRQ:VFP:"));
+    Serial.println(state.volumeFlowPulses);
 }
 
-void notifySettingsChanged() {
-    notifyTask(&t_effect_printStatus, true);
-    notifyTask(&t_stateUpdate_angleAndRelay, false);
-    notifyTask(&t_effect_refreshServoAndRelay, false);
-    notifyTask(&t_effect_processSettings, false);
+
+void serialPrintConfig() {
+    Serial.print(F("DRQ:QD:"));
+    Serial.println(config.Q_div);
+    Serial.print(F("DRQ:QO:"));
+    Serial.println(config.Q_offset);
 }

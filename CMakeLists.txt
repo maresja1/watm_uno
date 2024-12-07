@@ -11,7 +11,7 @@ set(CMAKE_C_COMPILER_WORKS 1)
 set(CMAKE_CXX_COMPILER_WORKS 1)
 set(PLATFORMIO /home/jan/.platformio/penv/bin/platformio)
 
-project("thermoino" C CXX)
+project("watm" C CXX)
 
 include(CMakeListsPrivate.txt)
 
