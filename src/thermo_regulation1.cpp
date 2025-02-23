@@ -35,8 +35,8 @@ State prevState = {
 };
 
 Config config = {
-    .Q_div = 6,
-    .Q_offset = 8,
+    .Q_div = 6.6f,
+    .Q_offset = 0.0f,
 };
 
 char buffer[MAX_BUFFER_LEN];
@@ -110,7 +110,6 @@ void stateUpdate_readSensors_cb()
 #endif
     if (lastUpdate == 0) {
         lastUpdate = millis();
-        pulsesSinceClear = 0;
         wdt_reset();
         return;
     }
@@ -180,7 +179,7 @@ void notifyTask(Task *task, bool immediate)
 char yesOrNo(int input);
 
 
-#define EEPROM_MAGIC 0xDEADBE01
+#define EEPROM_MAGIC 0xDEADBE02
 
 void eepromInit()
 {

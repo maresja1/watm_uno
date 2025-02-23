@@ -92,10 +92,10 @@ void stateUpdate_serialReader_cb()
                     serialPrintConfig();
                 }
             OR_PARSE(CMD_SET_Q_DIV)
-                config.Q_div = strtol(valueBuffer.c_str(), nullptr, 10);
+                config.Q_div = (float) strtod(valueBuffer.c_str(), nullptr);
                 serialPrintConfig();
             OR_PARSE(CMD_SET_Q_OFF)
-                config.Q_offset = strtol(valueBuffer.c_str(), nullptr, 10);
+                config.Q_offset =  (float) strtod(valueBuffer.c_str(), nullptr);
                 serialPrintConfig();
             } else {
                 // Serial.print(F("Unknown command: "));

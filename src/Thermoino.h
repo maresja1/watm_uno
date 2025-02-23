@@ -53,8 +53,8 @@ struct State {
 };
 
 struct Config {
-    uint8_t Q_div;
-    uint8_t Q_offset;
+    float Q_div;
+    float Q_offset;
 };
 
 extern State state;
