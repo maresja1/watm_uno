@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <util/atomic.h>
 #include <EEPROM.h>
 #include <TaskScheduler.h>
 #include <avr/wdt.h>
@@ -11,10 +12,12 @@ const float simulationSpeed = 1.0f;
 
 void eeprom_persist_cb();
 
+#define SENSOR_UPDATE_PERIOD_MS 500
+
 Scheduler runner;
 //Tasks
 // periodic task to read sensors - temperatures, might enable other tasks
-Task t_stateUpdate_readSensors(uint64_t(1e3 / simulationSpeed), -1, &stateUpdate_readSensors_cb, &runner);
+Task t_stateUpdate_readSensors(uint64_t(SENSOR_UPDATE_PERIOD_MS / simulationSpeed), -1, &stateUpdate_readSensors_cb, &runner);
 // periodic task to update state based on instructions from the Serial port
 Task t_stateUpdate_serialReader(uint64_t(2e3 / simulationSpeed), -1, &stateUpdate_serialReader_cb, &runner);
 // periodic task to update eeprom data
@@ -40,8 +43,6 @@ Config config = {
 };
 
 char buffer[MAX_BUFFER_LEN];
-
-volatile uint8_t pulsesSinceClear = 0;
 
 byte sensorInterrupt = 0;  // 0 = digital pin 2
 byte sensorPin = 2;
@@ -84,19 +85,32 @@ void loop()
 
 uint32_t lastUpdate = 0;
 
-// #define CAS __sync_bool_compare_and_swap
+volatile uint8_t pulsesSinceClear = 0;
 
 uint8_t getPulsesCasAndClear() {
-    uint8_t pulses;
+    uint8_t pulses = 0;
     // do {
     //     pulses = pulsesSinceClear;
     // } while (!CAS(&pulsesSinceClear, pulses, 0));
     // return pulses;
-    noInterrupts();
-    pulses = pulsesSinceClear;
-    pulsesSinceClear = 0;
-    interrupts();
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        pulses = pulsesSinceClear;
+        pulsesSinceClear = 0;
+    }
     return pulses;
+}
+
+/**
+ * Insterrupt Service Routine
+ */
+void pulseCounter()
+{
+#if DEBUG_LEVEL > 0
+    Serial.print(F("Pulse"));
+#endif
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        pulsesSinceClear++;
+    }
 }
 
 void stateUpdate_readSensors_cb()
@@ -104,25 +118,19 @@ void stateUpdate_readSensors_cb()
     wdt_reset();
     const uint32_t now = millis();
     const uint32_t pulses = getPulsesCasAndClear();
+    const uint32_t sinceLast = lastUpdate != 0 && now > lastUpdate ? now - lastUpdate : SENSOR_UPDATE_PERIOD_MS;
+    lastUpdate = now;
 
 #if DEBUG_LEVEL > 0
     DEBUG_TASK_ENTRY("stateUpdate_readSensors");
 #endif
-    if (lastUpdate == 0) {
-        lastUpdate = millis();
-        wdt_reset();
-        return;
-    }
-
-    const uint32_t sinceLast = now - lastUpdate;
-    lastUpdate = now;
 
     float timeCorrection = static_cast<float>(sinceLast) / 1000.0f;
 
     float flow; // L/min
     if (pulses > 1) {
         float freq = static_cast<float>(pulses) / timeCorrection;
-        flow = (freq + static_cast<float>(config.Q_offset)) / static_cast<float>(config.Q_div);
+        flow = (freq + config.Q_offset) / config.Q_div;
     } else {
         flow = 0.0f;
     }
@@ -131,7 +139,6 @@ void stateUpdate_readSensors_cb()
     state.volumePulses += pulses;
     state.volumeFlow = flow;
     state.volumeFlowPulses = pulses;
-    pulsesSinceClear = 0;
 
 #if PRINT_SERIAL_UPDATES
     if(pulses > 0 || prevState.volumeFlowPulses > 0) {
@@ -148,17 +155,6 @@ void stateUpdate_readSensors_cb()
 #endif
 
     wdt_reset();
-}
-
-/**
- * Insterrupt Service Routine
- */
-void pulseCounter()
-{
-#if DEBUG_LEVEL > 0
-  Serial.print(F("Pulse"));
-#endif
-  pulsesSinceClear++;
 }
 
 void eeprom_persist_cb()
